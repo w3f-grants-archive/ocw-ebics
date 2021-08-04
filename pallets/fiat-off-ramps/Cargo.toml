@@ -1,0 +1,99 @@
+[package]
+name = "fiat-off-ramps"
+version = "1.0.0"
+edition = "2018"
+authors = ['Dastanbek Samatov']
+description = "An offchain-worker pallet to communicate with EBICS services"
+license = "GPL-3.0-or-later"
+
+[dependencies.parking_lot]
+version = '0.11'
+
+[dependencies.serde]
+version = '1.0.100'
+default-features = false 
+features = ['derive']
+
+[dependencies.serde_json]
+version = '1.0.45'
+default-features = false
+features = ['alloc']
+
+# Substrate packages
+
+[dependencies.codec]
+default-features = false
+features = ['derive']
+package = 'parity-scale-codec'
+version = '2.0.0'
+
+[dependencies.frame-support]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-07'
+version = '3.0.0'
+
+[dependencies.frame-system]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-07'
+version = '3.0.0'
+
+[dependencies.pallet-timestamp]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-07'
+version = '3.0.0'
+
+[dependencies.sp-core]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-07'
+version = '3.0.0'
+
+
+[dependencies.sp-runtime]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-07'
+version = '3.0.0'
+
+
+[dependencies.sp-std]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-07'
+version = '3.0.0'
+
+[dependencies.sp-io]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-07'
+version = '3.0.0'
+
+[dependencies.sp-keystore]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-07'
+version = '0.9'
+optional = true
+
+[dependencies.sp-arithmetic]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-07'
+version = '3.0.0'
+
+[features]
+default = ['std']
+std = [
+	'frame-support/std',
+	'frame-system/std',
+	'codec/std',
+	'sp-keystore',
+	'sp-io/std',
+	'sp-runtime/std',
+	'sp-std/std',
+	'sp-arithmetic/std',
+	'sp-keystore/std',
+]
