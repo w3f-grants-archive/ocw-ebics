@@ -3,20 +3,18 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 
-use core::{convert::TryInto, fmt};
+use pallet_timestamp::{Now};
 use frame_support::{
-	debug, decl_error, decl_event, decl_module, decl_storage, 
-	dispatch::DispatchResult, traits::{Get}
+	decl_error, decl_event, decl_module, decl_storage, 
+	dispatch::DispatchResult
 };
 use codec::{Decode, Encode};
 use serde_json::{Value};
-use frame_system::{ensure_none, offchain::{AppCrypto, CreateSignedTransaction, SendTransactionTypes, SendUnsignedTransaction, SignedPayload, SigningTypes, SubmitTransaction}};
+use frame_system::{ensure_none, offchain::{AppCrypto, CreateSignedTransaction, SendTransactionTypes, SignedPayload, SigningTypes, SubmitTransaction}};
 use sp_core::{crypto::KeyTypeId};
-use sp_runtime::{RuntimeDebug, offchain as rt_offchain, offchain::{ storage::StorageValueRef, storage_lock::{BlockAndTime, StorageLock}}, transaction_validity::{
-		InvalidTransaction, TransactionSource, TransactionValidity, ValidTransaction,
+use sp_runtime::{RuntimeDebug, offchain as rt_offchain, offchain::{ storage_lock::{BlockAndTime, StorageLock}}, transaction_validity::{
+		InvalidTransaction, TransactionSource, TransactionValidity, ValidTransaction
 	}};
-
-use serde::{Deserialize};
 
 /// Defines application identifier for crypto keys of this module.
 ///
@@ -65,9 +63,6 @@ impl<T: SigningTypes> SignedPayload<T> for Payload<T::Public> {
 	}
 }
 
-#[derive(Debug, Deserialize, Encode, Decode, Default)]
-struct IndexingData(Vec<u8>, u64);
-
 type StrVecBytes = Vec<u8>;
 
 /// This is the pallet's configuration trait
@@ -80,8 +75,6 @@ pub trait Config: pallet_timestamp::Config + frame_system::Config + CreateSigned
 	type Event: From<Event<Self>> + Into<<Self as frame_system::Config>::Event>;
 
 	type SubmitTransaction: SendTransactionTypes<<Self as Config>::Call>;
-
-	type BlockFetchDur: Get<Self::BlockNumber>;
 }
 
 decl_storage! {
@@ -133,22 +126,22 @@ decl_module! {
 			price: u64
 		) -> DispatchResult {
 			let who = ensure_none(origin)?;
-			let (sym, remote_src) = (crypto_info.0, crypto_info.1);
-			let now = pallet_timestamp::Now::get();
-			debug(format!("record_price: {:?}, {:?}, {:?}",
-				*core::str::from_utf8(&sym).map_err(|_| "`sym` conversion error")?,
-				*core::str::from_utf8(&remote_src).map_err(|_| "`remote_src` conversion error")?,
-				price)
-		  	);
-			<TokenSrcPPMap<T>>::mutate(&sym, |pp_vec| pp_vec.push((now, price)));
+			// let (sym, remote_src) = (crypto_info.0, crypto_info.1);
+			let now = <pallet_timestamp::Pallet<T>>::get();
+			
+			// runtime_print!("record_price: {:?}, {:?}, {:?}",
+			// 	core::str::from_utf8(&crypto_info.0).map_err(|_| "error converting str")?,
+			// 	core::str::from_utf8(&crypto_info.1).map_err(|_| "error converting str")?,
+			// 	price
+		  	// );
+			<TokenSrcPPMap<T>>::mutate(&crypto_info.0, |pp_vec| pp_vec.push((now, price)));
 
-			Self::deposit_event(RawEvent::FetchedPrice(sym, remote_src, now, price));
+			Self::deposit_event(RawEvent::FetchedPrice(crypto_info.0, crypto_info.1, now, price));
 			Ok(())
 		}
 
 		fn offchain_worker(block_number: T::BlockNumber) {
-			debug("Entering off-chain worker");
-			let duration = T::BlockFetchDur::get();
+			// runtime_print!("Entering off-chain worker");
 			// Here we are showcasing various techniques used when running off-chain workers (ocw)
 			// 1. Sending signed transaction from ocw
 			// 2. Sending unsigned transaction from ocw
@@ -159,35 +152,33 @@ decl_module! {
 			// 	1 => Self::record_price(),
 			// 	_ => Err(Error::<T>::UnknownOffchainMux),
 			// };
-
+			
 			let (sym, remote_src, remote_url) = FETCHED_CRYPTO;
-			if duration > 0.into() && block_number % duration == 0.into() {
-				if let Err(e) = Self::fetch_price(block_number, *sym, *remote_src, *remote_url) {
-					debug(format!("Error fetching: {:?}, {:?}: {:?}",
-					core::str::from_utf8(sym).unwrap(),
-					core::str::from_utf8(remote_src).unwrap(),
-					e));
-				}
+			if let Err(e) = Self::fetch_price(block_number, &*sym, &*remote_src, &*remote_url) {
+				// runtime_print!("Error fetching: {:?}, {:?}: {:?}",
+				// 	core::str::from_utf8(sym).unwrap(),
+				// 	core::str::from_utf8(remote_src).unwrap(),
+				// e);
 			}
 
 
 			// Reading back the off-chain indexing value. It is exactly the same as reading from
 			// ocw local storage.
-			let key = Self::derived_key(block_number);
-			let oci_mem = StorageValueRef::persistent(&key);
+			// let key = Self::derived_key(block_number);
+			// let oci_mem = StorageValueRef::persistent(&key);
 
-			if let Some(Some(data)) = oci_mem.get::<IndexingData>() {
-				debug(format!("off-chain indexing data: {:?}, {:?}",
-					str::from_utf8(&data.0).unwrap_or("error"), data.1));
-			} else {
-				debug(format!("no off-chain indexing data retrieved."));
-			}
+			// if let Some(Some(data)) = oci_mem.get::<IndexingData>() {
+			// 	debug(format!("off-chain indexing data: {:?}, {:?}",
+			// 		str::from_utf8(&data.0).unwrap_or("error"), data.1));
+			// } else {
+			// 	debug(format!("no off-chain indexing data retrieved."));
+			// }
 		}
 	}
 }
 
 impl<T: Config> Module<T> {
-	fn fetch_json<'a>(remote_url: &'a [u8]) -> serde_json::Result<Value> {
+	fn fetch_json<'a>(remote_url: &'a [u8]) -> Result<Value, &str> {
 		let remote_url_str = core::str::from_utf8(remote_url)
 			.map_err(|_| "Error in converting remote_url to string")?;
 
@@ -198,14 +189,14 @@ impl<T: Config> Module<T> {
 			.map_err(|_| "Error in waiting http response back")?;
 
 		if response.code != 200 {
-			debug(format!("Unexpected status code: {}", response.code));
+			// runtime_print!("Unexpected status code: {}", response.code);
 			return Ok(Value::Null)
 		}
 
 		let json_result: Vec<u8> = response.body().collect::<Vec<u8>>();
 	
-		let json_val = serde_json::from_str(&core::str::from_utf8(&json_result)?)?;
-		debug( format!("json_val {:?}", json_val));
+		let json_val = serde_json::from_slice(&json_result).map_err(|_| "Error fetchin")?;
+		// runtime_print!("json_val {:?}", json_val);
 		Ok(json_val)
 	}
 
@@ -214,14 +205,14 @@ impl<T: Config> Module<T> {
 		sym: &'a [u8],
 		remote_src: &'a [u8],
 		remote_url: &'a [u8]
-	) -> Result<(), <Error<T>>> {
-		debug(format!("fetching price: {:?}:{:?}",
-		  core::str::from_utf8(sym).unwrap(),
-		  core::str::from_utf8(remote_src).unwrap())
-		);
+	) -> Result<(), &'a str> {
+		// runtime_print!("fetching price: {:?}:{:?}",
+		//   core::str::from_utf8(sym).unwrap(),
+		//   core::str::from_utf8(remote_src).unwrap()
+		// );
 
 		let json = Self::fetch_json(remote_url)?;
-		let price = Self::fetch_price_coincap(json);
+		let price = Self::fetch_price_coincap(json)?;
 
 		let call = Call::record_price(
 			block,
@@ -230,13 +221,13 @@ impl<T: Config> Module<T> {
 		);
 
 		SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(call.into()).map_err(|_| {
-			debug("Failed in offchain_unsigned_tx");
-			<Error<T>>::OffchainUnsignedTxError
+			// runtime_print!("Failed in offchain_unsigned_tx");
+			"<Error<T>>::OffchainUnsignedTxError"
 		})
 	}
 
-	fn fetch_price_coincap(json: Value) -> Result<u64, serde_json::Error> {
-		let val_f64: f64 = json.get("USD");
+	fn fetch_price_coincap(json: Value) -> Result<u64, &'static str> {
+		let val_f64: f64 = json.get("USD").unwrap().as_f64().unwrap();
 		Ok((val_f64 * 1000.).round() as u64)
 	}
 }
@@ -255,7 +246,7 @@ impl<T: Config> frame_support::unsigned::ValidateUnsigned for Module<T> {
 		};
 
 		match call {
-			Call::record_price(_number,  (_sym, _remote, _url)) => valid_tx(b"record_price"),
+			Call::record_price(_number,  (_sym, _remote, _url), _price) => valid_tx(b"record_price"),
 			_ => InvalidTransaction::Call.into(),
 		}
 	}

@@ -1451,13 +1451,9 @@ dependencies = [
  "frame-system",
  "pallet-timestamp",
  "parity-scale-codec",
- "parking_lot 0.11.1",
- "serde",
  "serde_json",
  "sp-arithmetic",
  "sp-core",
- "sp-io",
- "sp-keystore",
  "sp-runtime",
  "sp-std",
 ]

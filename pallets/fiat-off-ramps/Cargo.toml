@@ -6,13 +6,6 @@ authors = ['Dastanbek Samatov']
 description = "An offchain-worker pallet to communicate with EBICS services"
 license = "GPL-3.0-or-later"
 
-[dependencies.parking_lot]
-version = '0.11'
-
-[dependencies.serde]
-version = '1.0.100'
-default-features = false 
-features = ['derive']
 
 [dependencies.serde_json]
 version = '1.0.45'
@@ -36,6 +29,7 @@ version = '3.0.0'
 [dependencies.frame-system]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
+sp-keystore = { version = '0.9', optional = true }
 tag = 'monthly-2021-07'
 version = '3.0.0'
 
@@ -51,7 +45,6 @@ git = 'https://github.com/paritytech/substrate.git'
 tag = 'monthly-2021-07'
 version = '3.0.0'
 
-
 [dependencies.sp-runtime]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
@@ -65,19 +58,6 @@ git = 'https://github.com/paritytech/substrate.git'
 tag = 'monthly-2021-07'
 version = '3.0.0'
 
-[dependencies.sp-io]
-default-features = false
-git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-07'
-version = '3.0.0'
-
-[dependencies.sp-keystore]
-default-features = false
-git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-07'
-version = '0.9'
-optional = true
-
 [dependencies.sp-arithmetic]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
@@ -90,10 +70,7 @@ std = [
 	'frame-support/std',
 	'frame-system/std',
 	'codec/std',
-	'sp-keystore',
-	'sp-io/std',
 	'sp-runtime/std',
 	'sp-std/std',
 	'sp-arithmetic/std',
-	'sp-keystore/std',
 ]

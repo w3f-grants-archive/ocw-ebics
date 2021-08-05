@@ -273,16 +273,11 @@ type SubmitHttpTransaction = frame_system::offchain::SubmitTransaction<
 	UncheckedExtrinsic
 >;
 
-parameter_types! {
-	pub const BlockFetchDur: BlockNumber = 2;
-}
-
 /// Configure the pallet-template in pallets/template.
 impl fiat_off_ramps::Config for Runtime {
 	type Event = Event;
 	type Call = Call;
 	type SubmitTransaction = SubmitHttpTransaction;
-	type BlockFetchDur = BlockFetchDur;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
