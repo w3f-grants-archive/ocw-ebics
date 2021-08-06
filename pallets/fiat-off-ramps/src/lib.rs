@@ -2,19 +2,18 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-
-use pallet_timestamp::{Now};
 use frame_support::{
 	decl_error, decl_event, decl_module, decl_storage, 
-	dispatch::DispatchResult
+	dispatch::DispatchResult, log::{log, Level, info, warn, error}
 };
 use codec::{Decode, Encode};
-use serde_json::{Value};
-use frame_system::{ensure_none, offchain::{AppCrypto, CreateSignedTransaction, SendTransactionTypes, SignedPayload, SigningTypes, SubmitTransaction}};
+use lite_json::{json::{JsonValue}, json_parser::{parse_json}};
+use frame_system::{ensure_none, offchain::{AppCrypto, CreateSignedTransaction, SignedPayload, SigningTypes, SubmitTransaction}};
 use sp_core::{crypto::KeyTypeId};
-use sp_runtime::{RuntimeDebug, offchain as rt_offchain, offchain::{ storage_lock::{BlockAndTime, StorageLock}}, transaction_validity::{
+use sp_runtime::{RuntimeDebug, offchain as rt_offchain, offchain::{http}, transaction_validity::{
 		InvalidTransaction, TransactionSource, TransactionValidity, ValidTransaction
 	}};
+use sp_std::vec::Vec;
 
 /// Defines application identifier for crypto keys of this module.
 ///
@@ -30,7 +29,7 @@ const UNSIGNED_TXS_PRIORITY: u64 = 100;
 
 const FETCHED_CRYPTO: (&[u8], &[u8], &[u8]) = (
 	b"BTC", b"coincap",
-	b"https://api.coincap.io/v2/assets/bitcoin"
+	b"https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD"
 );
 
 const FETCH_TIMEOUT_PERIOD: u64 = 3000; // in milli-seconds
@@ -43,12 +42,29 @@ const ONCHAIN_TX_KEY: &[u8] = b"fiat-off-ramps::storage::tx";
 /// We can utilize the supported crypto kinds (`sr25519`, `ed25519` and `ecdsa`) and augment
 /// them with the pallet-specific identifier.
 pub mod crypto {
-	use crate::KEY_TYPE;
+	use crate::KEY_TYPE;	
 	use sp_core::sr25519::Signature as Sr25519Signature;
 	use sp_runtime::app_crypto::{app_crypto, sr25519};
 	use sp_runtime::{traits::Verify, MultiSignature, MultiSigner};
 
 	app_crypto!(sr25519, KEY_TYPE);
+
+	pub struct TestAuthId;
+	// implemented for ocw-runtime
+	impl frame_system::offchain::AppCrypto<MultiSigner, MultiSignature> for TestAuthId {
+		type RuntimeAppPublic = Public;
+		type GenericSignature = sp_core::sr25519::Signature;
+		type GenericPublic = sp_core::sr25519::Public;
+	}
+
+	// implemented for mock runtime in test
+	impl frame_system::offchain::AppCrypto<<Sr25519Signature as Verify>::Signer, Sr25519Signature>
+		for TestAuthId
+	{
+		type RuntimeAppPublic = Public;
+		type GenericSignature = sp_core::sr25519::Signature;
+		type GenericPublic = sp_core::sr25519::Public;
+	}
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
@@ -73,8 +89,6 @@ pub trait Config: pallet_timestamp::Config + frame_system::Config + CreateSigned
 	type Call: From<Call<Self>>;
 	/// The overarching event type.
 	type Event: From<Event<Self>> + Into<<Self as frame_system::Config>::Event>;
-
-	type SubmitTransaction: SendTransactionTypes<<Self as Config>::Call>;
 }
 
 decl_storage! {
@@ -154,12 +168,11 @@ decl_module! {
 			// };
 			
 			let (sym, remote_src, remote_url) = FETCHED_CRYPTO;
-			if let Err(e) = Self::fetch_price(block_number, &*sym, &*remote_src, &*remote_url) {
+			Self::fetch_price(block_number, &*sym, &*remote_src, &*remote_url);
 				// runtime_print!("Error fetching: {:?}, {:?}: {:?}",
 				// 	core::str::from_utf8(sym).unwrap(),
 				// 	core::str::from_utf8(remote_src).unwrap(),
 				// e);
-			}
 
 
 			// Reading back the off-chain indexing value. It is exactly the same as reading from
@@ -178,7 +191,7 @@ decl_module! {
 }
 
 impl<T: Config> Module<T> {
-	fn fetch_json<'a>(remote_url: &'a [u8]) -> Result<Value, &str> {
+	fn fetch_json<'a>(remote_url: &'a [u8]) -> Result<JsonValue, &str> {
 		let remote_url_str = core::str::from_utf8(remote_url)
 			.map_err(|_| "Error in converting remote_url to string")?;
 
@@ -190,12 +203,17 @@ impl<T: Config> Module<T> {
 
 		if response.code != 200 {
 			// runtime_print!("Unexpected status code: {}", response.code);
-			return Ok(Value::Null)
+			return Ok(JsonValue::Null)
 		}
 
 		let json_result: Vec<u8> = response.body().collect::<Vec<u8>>();
-	
-		let json_val = serde_json::from_slice(&json_result).map_err(|_| "Error fetchin")?;
+		
+		let json_str: &str = match core::str::from_utf8(&json_result) {
+			Ok(v) => v,
+			Err(e) => "Error parsing json"
+		};
+
+		let json_val = parse_json(json_str).expect("Invalid json");
 		// runtime_print!("json_val {:?}", json_val);
 		Ok(json_val)
 	}
@@ -205,30 +223,46 @@ impl<T: Config> Module<T> {
 		sym: &'a [u8],
 		remote_src: &'a [u8],
 		remote_url: &'a [u8]
-	) -> Result<(), &'a str> {
+	) -> Result<(), http::Error> {
 		// runtime_print!("fetching price: {:?}:{:?}",
 		//   core::str::from_utf8(sym).unwrap(),
 		//   core::str::from_utf8(remote_src).unwrap()
 		// );
 
-		let json = Self::fetch_json(remote_url)?;
-		let price = Self::fetch_price_coincap(json)?;
+		let json = Self::fetch_json(remote_url).unwrap();
+		let price = match Self::fetch_price_coincap(json) {
+			Some(price) => Ok(price),
+			None => {
+				log!(Level::Warn, "Unable to extract price from response");
+				Err(http::Error::Unknown)
+			}
+		};
 
 		let call = Call::record_price(
 			block,
 			(sym.to_vec(), remote_src.to_vec(), remote_url.to_vec()),
-			price
+			price?
 		);
 
 		SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(call.into()).map_err(|_| {
 			// runtime_print!("Failed in offchain_unsigned_tx");
-			"<Error<T>>::OffchainUnsignedTxError"
+			http::Error::Unknown
 		})
 	}
 
-	fn fetch_price_coincap(json: Value) -> Result<u64, &'static str> {
-		let val_f64: f64 = json.get("USD").unwrap().as_f64().unwrap();
-		Ok((val_f64 * 1000.).round() as u64)
+	fn fetch_price_coincap(json: JsonValue) -> Option<u64> {
+		let price = match json {
+			JsonValue::Object(obj) => {
+				let (_, v) = obj.into_iter().find(|(k, _)| k.iter().copied().eq("USD".chars())).unwrap();				
+				match v {
+					JsonValue::Number(number) => number,
+					_ => return None,
+				}
+			},
+			_ => return None,
+		};
+		let exp = price.fraction_length.checked_sub(2).unwrap_or(0);
+		Some(price.integer as u64 * 100 + (price.fraction / 10_u64.pow(exp)) as u64)
 	}
 }
 
