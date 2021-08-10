@@ -21,21 +21,9 @@ use sp_std::vec::Vec;
 /// `KeyTypeId` via the keystore to sign the transaction.
 /// The keys can be inserted manually via RPC (see `author_insertKey`).
 pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"demo");
-/// The type to sign and send transactions.
-const UNSIGNED_TXS_PRIORITY: u64 = 100;
-
-const FETCHED_CRYPTO: (&[u8], &[u8], &[u8]) = (
-	b"BTC", b"coincap",
-	b"https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD"
-);
 
 // ebics endpoint for bank statements
 const API_URL: &[u8] = b"http://localhost:8093/ebics/api-v1/bankstatements";
-const FETCH_TIMEOUT_PERIOD: u64 = 3000; // in milli-seconds
-const LOCK_TIMEOUT_EXPIRATION: u64 = FETCH_TIMEOUT_PERIOD + 1000; // in milli-seconds
-const LOCK_BLOCK_EXPIRATION: u32 = 3; // in block number
-
-const ONCHAIN_TX_KEY: &[u8] = b"fiat-ramps::storage::tx";
 
 pub struct Transaction {
 	iban: Vec<u8>,
@@ -139,12 +127,7 @@ pub mod pallet {
 			let parent_hash = <frame_system::Pallet<T>>::block_hash(block_number - 1u32.into());
 			log::debug!("Current block: {:?} (parent hash: {:?})", block_number, parent_hash);
 
-			let mut should_sync = Self::should_sync(&block_number);
-
-			// if we are in genesis, should sync 
-			if block_number == 0u32.into() {
-				should_sync = true;
-			}
+			let should_sync = Self::should_sync(&block_number);
 
 			if !should_sync {
 				return ;
@@ -210,9 +193,12 @@ pub mod pallet {
 	#[pallet::getter(fn prices)]
 	pub(super) type IbanBalances<T: Config> = StorageMap<_, Blake2_128Concat, StrVecBytes, u64, ValueQuery>;
 
+	#[pallet::type_value]
+	pub(super) fn DefaultSync<T: Config>() -> T::BlockNumber { 1u32.into() }
+
 	#[pallet::storage]
 	#[pallet::getter(fn next_sync_at)]
-	pub(super) type NextSyncAt<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery>;
+	pub(super) type NextSyncAt<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery, DefaultSync<T>>;
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
