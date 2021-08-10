@@ -22,9 +22,11 @@ use sp_runtime::{
 	traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor, Verify}, 
 	transaction_validity::{TransactionSource, TransactionValidity}};
 use sp_std::prelude::*;
+use sp_transaction_pool::TransactionPriority;
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
+use frame_support::traits::Get;
 
 // A few exports that help ease life for downstream crates.
 pub use frame_support::{
@@ -44,7 +46,7 @@ pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Permill};
 
 /// Import the fiat-off-ramp pallet.
-pub use fiat_off_ramps;
+pub use fiat_ramps;
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -272,11 +274,20 @@ impl pallet_sudo::Config for Runtime {
 
 pub type SignedPayload = generic::SignedPayload<Call, SignedExtra>;
 
-impl fiat_off_ramps::Config for Runtime {
-	type AuthorityId = fiat_off_ramps::crypto::TestAuthId;
+parameter_types! {
+	// interval in blocks between two consecutive unsigned transactions
+	pub const UnsignedInterval: BlockNumber = 3;
+	pub const UnsignedPriority: TransactionPriority = 1000;
+}
+
+impl fiat_ramps::Config for Runtime {
+	type AuthorityId = fiat_ramps::crypto::TestAuthId;
 	type Event = Event;
 	type Call = Call;
+	type UnsignedInterval = UnsignedInterval;
+	type UnsignedPriority = UnsignedPriority;
 }
+
 impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Runtime
 where
 	Call: From<LocalCall>,
@@ -349,7 +360,7 @@ construct_runtime!(
 		TransactionPayment: pallet_transaction_payment::{Pallet, Storage},
 		Sudo: pallet_sudo::{Pallet, Call, Config<T>, Storage, Event<T>},
 		// Include the custom logic from the pallet-template in the runtime.
-		FiatOffRamps: fiat_off_ramps::{Pallet, Call, Storage, Event<T>, ValidateUnsigned},
+		FiatRamps: fiat_ramps::{Pallet, Call, Storage, Event<T>, ValidateUnsigned},
 	}
 );
 
