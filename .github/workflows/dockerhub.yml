@@ -2,7 +2,7 @@ on: [push, pull_request]
 jobs:
   push_to_dockerhub:
     name: build image and push to dockerhub
-    runs-on: hp
+    runs-on: self-hosted
 
     steps:
     - uses: actions/checkout@v2
