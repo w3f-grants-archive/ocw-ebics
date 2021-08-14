@@ -1,0 +1,28 @@
+version: "3.2"
+
+services:
+  ebics-service: 
+    container_name: ebics-service
+    image: e36io/ebics-service
+#    ports:
+#      - "8090:8090"
+
+  ebics-ocw: 
+    container_name: ebics-ocw
+    image: e36io/ebics-ocw
+    depends_on:
+      - "ebics-service"
+    ports:
+      - "9944:9944"
+      - "30333:30333"
+      - "9933:9933"
+  ebics-ocw-ui: 
+    container_name: ebics-ocw-ui
+    image: e36io/ebics-ocw-ui
+    depends_on:
+      - "ebics-ocw"
+    environment:
+      - PORT=8095
+      - PROVIDER_SOCKET=ws://ebics-ocw:9944
+    ports:
+      - "8095:8095"

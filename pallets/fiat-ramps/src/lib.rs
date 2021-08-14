@@ -128,7 +128,7 @@ pub mod pallet {
 			log::debug!("Current block: {:?} (parent hash: {:?})", block_number, parent_hash);
 
 			let should_sync = Self::should_sync(&block_number);
-			log::info!("Synching balances:  "should_sync);
+
 			if !should_sync {
 				return ;
 			}
