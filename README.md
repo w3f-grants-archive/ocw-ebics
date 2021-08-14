@@ -28,11 +28,22 @@ Note: the above code might take long to compile depending on your machine specs 
 
 ## Run
 
-The provided `cargo run` command will launch a temporary node and its state will be discarded after
+The OWC needs the backend which connects to the bank account, which is provided by
+(this project)[https://github.com/element36-io/ebics-java-service]. Start the backend:
+
+```sh
+docker run -p 8093:8093 e36io/ebics-service 
+```
+
+Now start the OCW. The provided `cargo run` command will launch a temporary node and its state will be discarded after
 you terminate the process. After the project has been built, there are other ways to launch the
 node.
 
-Or you can run the development node with temporary storage:
+```sh
+./target/release/node-template --dev --tmp
+```
+
+You can run the development node with temporary storage:
 
 ```sh
 ./target/release/node-template --dev --tmp
