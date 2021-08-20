@@ -27,30 +27,6 @@ pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"demo");
 // ebics endpoint for bank statements
 const API_URL: &[u8] = b"http://localhost:8093/ebics/api-v1/bankstatements";
 
-pub struct Transaction {
-	iban: Vec<u8>,
-	name: Vec<u8>,
-	addr_line: Vec<Vec<u8>>,
-	currency: Vec<u8>,
-	amount: f64,
-	reference: Vec<u8>,
-	pmt_inf_id: Vec<u8>,
-	msg_id: Vec<u8>,
-	instr_id: Vec<u8>
-}
-
-pub struct Iban {
-	iban: Vec<u8>,
-	balance_op: f64,
-	balance_op_currency: Vec<u8>,
-	balance_cl: f64,
-	balance_cl_currency: Vec<u8>,
-	booking_date: Vec<u8>,
-	validation_date: Vec<u8>,
-	incoming_transactions: Vec<Transaction>,
-	outgoing_transactions: Vec<Transaction>
-}
-
 /// Based on the above `KeyTypeId` we need to generate a pallet-specific crypto type wrapper.
 /// We can utilize the supported crypto kinds (`sr25519`, `ed25519` and `ecdsa`) and augment
 /// them with the pallet-specific identifier.
@@ -144,6 +120,14 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T:Config> Pallet<T> {
+		// TO-DO change weight for appropriate value
+		#[pallet::weight(0)]
+		pub fn set_api_url(origin: OriginFor<T>, url: Vec<u8>) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			<ApiUrl<T>>::put(url);
+			Ok(().into())
+		}
+
 		#[pallet::weight(0)]
 		pub fn submit_balances(origin: OriginFor<T>, iban_balances: Vec<IbanBalance>) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
@@ -201,6 +185,13 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn next_sync_at)]
 	pub(super) type NextSyncAt<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery, DefaultSync<T>>;
+
+	#[pallet::type_value]
+	pub(super) fn DefaultApi<T: Config>() -> StrVecBytes { API_URL.iter().cloned().collect() }	
+
+	#[pallet::storage]
+	#[pallet::getter(fn api_url)]
+	pub(super) type ApiUrl<T: Config> = StorageValue<_, StrVecBytes, ValueQuery, DefaultApi<T>>;
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
@@ -296,7 +287,9 @@ impl<T: Config> Pallet<T> {
 			return Err("Too early to send unsigned transaction")
 		}
 
-		let json = Self::fetch_json(API_URL).unwrap();
+		let remote_url = <ApiUrl<T>>::get();
+
+		let json = Self::fetch_json(&remote_url[..]).unwrap();
 		let iban_balances = match Self::extract_iban_balances(json) {
 			Some(iban_balances) => Ok(iban_balances),
 			None => {
