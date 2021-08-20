@@ -3,8 +3,7 @@ name: Run Unit Tests
 on:
   push:
     branches:
-    - master
-    - milestone-1
+    - main
 
 jobs:
   build-node-template:
