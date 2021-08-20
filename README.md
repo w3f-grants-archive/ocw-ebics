@@ -74,7 +74,7 @@ RUST_LOG=debug RUST_BACKTRACE=1 ./target/release/node-template -lruntime=debug -
 Once the node template is running locally, you can connect it with **Polkadot-JS Apps** front-end
 to interact with your chain. [Click here](https://polkadot.js.org/apps/#/explorer?rpc=ws://localhost:9944) connecting the Apps to your local node template.
 
-First, we will need to inject our types in the PolkadotJs interface [here:](https://polkadot.js.org/apps/#/settings/developer). Paste the contents of [`types.json`](https://github.com/element36-io/ocw-ebics/blob/main/pallets/fiat-ramps/types.json) in the text area and click `Save`.
+First, we will need to inject our types in the PolkadotJs interface [here:](https://polkadot.js.org/apps/#/settings/developer). Paste the contents of [`types.json`](https://github.com/element36-io/ocw-ebics/blob/main/pallets/fiat-ramps/src/types.json) in the text area and click `Save`.
 
 Now you will be able to open the block explorer and see transactions, events that have occured in the blockchain.
 
