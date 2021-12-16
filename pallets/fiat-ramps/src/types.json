@@ -1,4 +1,17 @@
 {
     "StrVecBytes": "Vec<u8>",
-    "IbanBalance": "(Vec<u8>, u64)"
-}
+    "IbanBalance": "(Vec<u8>, u64)",
+    "IbanAccount": {
+      "iban": "Vec<u8>",
+      "balance": "Balance",
+      "last_updated": "u64"
+    },
+    "Transaction": {
+      "iban": "Vec<u8>",
+      "name": "Vec<u8>",
+      "currency": "Vec<u8>",
+      "amount": "Balance",
+      "reference": "Vec<u8>",
+      "tx_type": "u8"
+    }
+  }
