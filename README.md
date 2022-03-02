@@ -29,7 +29,7 @@ Note: the above code might take long to compile depending on your machine specs 
 ## Run
 
 The OWC needs the backend which connects to the bank account, which is provided by
-(this project)[https://github.com/element36-io/ebics-java-service]. Start the backend:
+[this project](https://github.com/element36-io/ebics-java-service). Start the backend:
 
 ```sh
 docker run -p 8093:8093 e36io/ebics-service 
@@ -67,6 +67,37 @@ Start the development chain with detailed logging:
 
 ```bash
 RUST_LOG=debug RUST_BACKTRACE=1 ./target/release/node-template -lruntime=debug --dev
+```
+
+### Test bank accounts
+
+Following test accounts are for Alice, Bob and Charlie, respectively.
+
+```json
+{
+  "accounts" : [ {
+    "ownerName" : "Alice",
+    "iban" : "CH2108307000289537320",
+    "accountId": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+    "bic" : "HYPLCH22570",
+    "offeredAccountId" : "accountname1",
+    "nexusBankAccountId" : "CH2108307000289537320"
+  }, {
+    "ownerName" : "Bob",
+    "iban" : "CH1230116000289537312",
+    "accountId": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+    "bic" : "HYPLCH22572",
+    "offeredAccountId" : "accountname2",
+    "nexusBankAccountId" : "CH1230116000289537312"
+  }, {
+    "ownerName" : "Charlie",
+    "iban" : "CH1230116000289537313",
+    "accountId": "5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y",
+    "bic" : "HYPLCH22573",
+    "offeredAccountId" : "accountname3",
+    "nexusBankAccountId" : "CH1230116000289537313"
+  } ]
+}
 ```
 
 ### Connect with Polkadot-JS Apps Front-end

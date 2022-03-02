@@ -22,7 +22,6 @@ use sp_runtime::{
 	traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor, Verify}, 
 	transaction_validity::{TransactionSource, TransactionValidity}};
 use sp_std::prelude::*;
-use sp_transaction_pool::TransactionPriority;
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
@@ -148,7 +147,7 @@ parameter_types! {
 
 impl frame_system::Config for Runtime {
 	/// The basic call filter to use in dispatchable.
-	type BaseCallFilter = ();
+	type BaseCallFilter = frame_support::traits::Everything;
 	/// Block & extrinsics weights: base values and limits.
 	type BlockWeights = BlockWeights;
 	/// The maximum length of a block (in bytes).
@@ -201,6 +200,12 @@ impl pallet_randomness_collective_flip::Config for Runtime {}
 
 impl pallet_aura::Config for Runtime {
 	type AuthorityId = AuraId;
+	type DisabledValidators = ();
+	type MaxAuthorities = MaxAuthorities;
+}
+
+parameter_types! {
+	pub const MaxAuthorities: u32 = 32;
 }
 
 impl pallet_grandpa::Config for Runtime {
@@ -220,6 +225,8 @@ impl pallet_grandpa::Config for Runtime {
 	type HandleEquivocation = ();
 
 	type WeightInfo = ();
+
+	type MaxAuthorities = MaxAuthorities;
 }
 
 parameter_types! {
@@ -255,6 +262,7 @@ impl pallet_balances::Config for Runtime {
 
 parameter_types! {
 	pub const TransactionByteFee: Balance = 1;
+	pub OperationalFeeMultiplier: u8 = 5;
 }
 
 impl pallet_transaction_payment::Config for Runtime {
@@ -262,6 +270,7 @@ impl pallet_transaction_payment::Config for Runtime {
 	type TransactionByteFee = TransactionByteFee;
 	type WeightToFee = IdentityFee<Balance>;
 	type FeeMultiplierUpdate = ();
+	type OperationalFeeMultiplier = OperationalFeeMultiplier;
 }
 
 impl pallet_sudo::Config for Runtime {
@@ -269,24 +278,25 @@ impl pallet_sudo::Config for Runtime {
 	type Call = Call;
 }
 
-/// Configure the pallet-template in pallets/template.
-
+/// Configure the fiat-ramps pallet.
 pub type SignedPayload = generic::SignedPayload<Call, SignedExtra>;
 
 parameter_types! {
 	// interval in milliseconds between two offchain worker instances
 	// we set it at 5 block times
-	pub const MinimumInterval: u64 = MILLISECS_PER_BLOCK * 5;
-	pub const UnsignedPriority: TransactionPriority = 1000;
-	pub const Decimals: u8 = 10;
+	pub const MinimumInterval: u64 = MILLISECS_PER_BLOCK * 1;
+	pub const UnsignedPriority: u64 = 1000;
+	/// We set decimals for fiat currencies to 2
+	/// (e.g. 1 EUR = 1.00 EUR)
+	pub const Decimals: u8 = 2;
 }
 
 impl fiat_ramps::Config for Runtime {
 	type AuthorityId = fiat_ramps::crypto::OcwAuthId;
 	type Event = Event;
 	type Call = Call;
-	type Currency = pallet_balances::Pallet<Runtime>;
-	type TimeProvider = pallet_timestamp::Pallet<Runtime>;
+	type Currency = Balances;
+	type TimeProvider = Timestamp;
 	type MinimumInterval = MinimumInterval;
 	type UnsignedPriority = UnsignedPriority;
 	type Decimals = Decimals;
@@ -412,7 +422,7 @@ impl_runtime_apis! {
 
 	impl sp_api::Metadata<Block> for Runtime {
 		fn metadata() -> OpaqueMetadata {
-			Runtime::metadata().into()
+			OpaqueMetadata::new(Runtime::metadata().into())
 		}
 	}
 
@@ -441,8 +451,9 @@ impl_runtime_apis! {
 		fn validate_transaction(
 			source: TransactionSource,
 			tx: <Block as BlockT>::Extrinsic,
+			block_hash: <Block as BlockT>::Hash,
 		) -> TransactionValidity {
-			Executive::validate_transaction(source, tx)
+			Executive::validate_transaction(source, tx, block_hash)
 		}
 	}
 
@@ -458,7 +469,7 @@ impl_runtime_apis! {
 		}
 
 		fn authorities() -> Vec<AuraId> {
-			Aura::authorities()
+			Aura::authorities().into_inner()
 		}
 	}
 
@@ -497,6 +508,10 @@ impl_runtime_apis! {
 			// defined our key owner proof type as a bottom type (i.e. a type
 			// with no values).
 			None
+		}
+
+		fn current_set_id() -> fg_primitives::SetId {
+			Grandpa::current_set_id()
 		}
 	}
 

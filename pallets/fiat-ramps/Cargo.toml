@@ -7,20 +7,23 @@ description = "An offchain-worker pallet to communicate with EBICS services"
 license = "GPL-3.0-or-later"
 
 [dependencies]
-# Substrate packages
-codec = { package = "parity-scale-codec", version = "2.2.0", default-features = false }
-frame-support = { version = "3.0.0", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-07' }
-frame-system = { version = "3.0.0", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-07' }
-sp-core = { version = "3.0.0", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-07' }
-sp-keystore = { version = "0.9", git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-07', optional = true }
-sp-io = { version = "3.0.0", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-07' }
-sp-runtime = { version = "3.0.0", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-07' }
-sp-std = { version = "3.0.0", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-07' }
-pallet-aura = { version = "3.0.0", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-07' }
 lite-json = { git = "https://github.com/xlc/lite-json.git", branch ="master", default-features = false }
 log = { version = "0.4.14", default-features = false }
-pallet-timestamp = { version = "3.0.0", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-07' }
-sp-consensus-aura = { default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-07', version = '0.9.0' }
+codec = { package = "parity-scale-codec", version = "2.2.0", default-features = false }
+scale-info = { version = "1.0", default-features = false, features = ["derive"] }
+
+# Substrate packages
+frame-support = { version = "4.0.0-dev", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = "devhub/latest" }
+frame-system = { version = "4.0.0-dev", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'devhub/latest' }
+sp-keystore = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest", optional = true }
+sp-std = { version = "4.0.0-dev", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'devhub/latest' }
+sp-runtime = { version = "4.0.0-dev", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'devhub/latest' }
+sp-core = { version = "4.0.0-dev", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'devhub/latest' }
+sp-io = { version = "4.0.0-dev", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'devhub/latest' }
+
+# for testing
+pallet-balances = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest" }
+pallet-timestamp = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest" }
 
 [features]
 default = ['std']
@@ -34,8 +37,5 @@ std = [
 	'log/std',
 	'lite-json/std',
 	'sp-core/std',
-	'pallet-timestamp/std',
-	'pallet-aura/std',
-	'sp-consensus-aura/std',
 	'sp-keystore'
 ]

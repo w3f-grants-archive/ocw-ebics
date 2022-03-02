@@ -25,14 +25,16 @@ impl Deserialize<u128> for u128 {
         json.clone()
             .to_number()
             .map(|num| {
-                let exp = num.fraction_length.checked_sub(2).unwrap_or(0);
-                let balance = num.integer as u128 + (num.fraction / 10_u64.pow(exp)) as u128;
-                balance
+                let value_1 = num.integer as u128 * 10_u128.pow(num.exponent as u32 + 10);
+				let value_2 = num.fraction as u128 * 10_u128.pow(
+					num.exponent as u32 + 10 - num.fraction_length
+				);
+				value_1 + value_2
             })
     }
 }
 
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 pub(crate) struct Payload<Public> {
 	number: u64,
 	public: Public,
@@ -66,7 +68,7 @@ pub fn parse_object(key: &str, obj: &[(Vec<char>, lite_json::JsonValue)]) -> Jso
 
 
 /// 
-#[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug)]
+#[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 pub enum TransactionType {
 	Incoming,
 	Outgoing,
@@ -79,7 +81,7 @@ impl Default for TransactionType {
 	}
 }
 
-#[derive(Encode, Decode, Clone, PartialEq, Eq, Default, RuntimeDebug)]
+#[derive(Encode, Decode, Clone, PartialEq, Eq, Default, RuntimeDebug, TypeInfo)]
 pub struct Transaction {
 	// from
 	pub iban: StrVecBytes,
@@ -170,10 +172,13 @@ impl Transaction {
 
 /// IbanAccount Type contains the basic information of an account
 /// 
-#[derive(Encode, Decode, Clone, PartialEq, Eq, Default, RuntimeDebug)]
+#[derive(Encode, Decode, Clone, PartialEq, Eq, Default, RuntimeDebug, TypeInfo)]
 pub struct IbanAccount {
+	/// IBAN number of the account
 	pub iban: StrVecBytes,
+	/// Closing balance of the account
 	pub balance: u128,
+	/// Last time the statement was updated
 	pub last_updated: u64
 }
 
@@ -189,6 +194,7 @@ impl IbanAccount {
             last_updated
         }
     }
+	
 	pub fn from_json_value(json: &JsonValue) -> Option<Self> {
         let raw_object = json.as_object();
 		let iban_account = match raw_object {
@@ -206,4 +212,110 @@ impl IbanAccount {
 		};
 		Some(iban_account)
 	}
+}
+
+
+/// Unpeq request template
+/// 
+/// # Arguments
+/// 
+/// `account_id` - Sender of the unpeq request
+/// `amount` - Amount of the unpeq request
+/// `iban` - IBAN of the receiver
+/// `reference` - Reference of the unpeq request, we save request id in this field
+pub fn unpeg_request(
+	dest: &str, 
+	amount: u128, 
+	iban: &StrVecBytes,
+	reference: &str,
+) -> JsonValue {
+
+	// First step is to convert amount to NumberValue type
+	let integer = amount / 1_000_000_0000;
+	let fraction = amount % 1_000_000_0000;
+
+	// Mutable copy of `fraction` that will be used to calculate length of the fraction
+	let mut fraction_copy = fraction.clone();
+
+	let fraction_length = {
+		let mut len = 0;
+		
+		while fraction_copy > 0 {
+			fraction_copy /= 10;
+			len += 1;
+		}
+		len
+	};
+
+	let amount_json = JsonValue::Number(NumberValue {
+		integer: integer as i64,
+		fraction: fraction as u64,
+		fraction_length,
+		exponent: 0,
+	});
+
+	let iban_json = JsonValue::String(
+		iban[..].iter().map(|b| *b as char).collect::<Vec<char>>()
+	);
+
+	JsonValue::Object(
+		vec![
+			(
+				"amount".chars().into_iter().collect(), 
+				amount_json
+			),
+			(
+				"clearingSystemMemberId".chars().into_iter().collect(),
+				JsonValue::String(vec!['H', 'Y', 'P', 'L', 'C', 'H', '2', '2'])
+			),
+			(
+				"currency".chars().into_iter().collect(), 
+				JsonValue::String(vec!['E', 'U', 'R'])
+			),
+			(
+				"nationalPayment".chars().into_iter().collect(),
+				JsonValue::Boolean(true)
+			),
+			(
+				"ourReference".chars().into_iter().collect(), 
+				JsonValue::String(reference.chars().into_iter().collect())
+			),
+			(
+				"purpose".chars().into_iter().collect(), 
+				JsonValue::String(dest.chars().into_iter().collect())
+			),
+			(
+				"receipientBankName".chars().into_iter().collect(),
+				JsonValue::String(vec!['H', 'y', 'p'])
+			),
+			(
+				"receipientCity".chars().into_iter().collect(),
+				JsonValue::String(vec!['e'])
+			),
+			(
+				"receipientCountry".chars().into_iter().collect(),
+				JsonValue::String(vec!['C', 'H'])
+			),
+			(
+				"receipientName".chars().into_iter().collect(),
+				JsonValue::String(vec!['e'])
+			),
+			(
+				"receipientIban".chars().into_iter().collect(),
+				iban_json
+			),
+			(
+				"receipientStreet".chars().into_iter().collect(),
+				JsonValue::String(vec!['e'])
+			),
+			(
+				"receipientStreetNr".chars().into_iter().collect(),
+				JsonValue::String(vec!['2', '5'])
+			),
+			(
+				"receipientZip".chars().into_iter().collect(),
+				JsonValue::String(vec!['6', '3', '4', '0'])
+			)
+		]
+	)
 }
