@@ -49,6 +49,14 @@ You can run the development node with temporary storage:
 ./target/release/node-template --dev --tmp
 ```
 
+## Tests
+
+To run unit tests for offchain-worker, execute the following command:
+
+```sh
+cargo test -p fiat-ramps
+```
+
 ### Single-Node Development Chain
 
 This command will start the single-node development chain with persistent state:
