@@ -237,11 +237,11 @@ pub mod pallet {
 		#[pallet::weight(1000)]
 		pub fn unmap_iban_account(
 			origin: OriginFor<T>,
-			iban: IbanAccount,
+			iban: StrVecBytes,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 
-			IbanToAccount::<T>::remove(iban.iban.clone());
+			IbanToAccount::<T>::remove(iban.clone());
 
 			Self::deposit_event(Event::IbanAccountUnmapped(who, iban));
 
@@ -372,16 +372,16 @@ pub mod pallet {
 			T::Currency::transfer(&who, &Self::account_id(), amount, ExistenceRequirement::AllowDeath)
 				.map_err(|_| DispatchError::Other("Can't burn funds"))?;
 			
-			let iban = IbanToAccount::<T>::iter().find(|(_, v)| *v == who)
-				.ok_or(DispatchError::Other("Can't find iban account"))?.0; 
-
 			// Request id (nonce)
 			let request_id = Self::burn_request_count();
+
+			let dest_iban = IbanToAccount::<T>::iter().find(|(_, v)| *v == address)
+				.ok_or(DispatchError::Other("Can't find iban account"))?.0;
 
 			let burn_request = BurnRequest {
 				burner: who.clone(),
 				dest: Some(address),
-				dest_iban: Some(iban.clone()),
+				dest_iban: Some(dest_iban.clone()),
 				amount,
 				status: BurnRequestStatus::Pending,
 			};
@@ -395,16 +395,6 @@ pub mod pallet {
 			// create burn request event
 			Self::deposit_event(Event::BurnRequest(burn_request));
 
-			Ok(().into())
-		}
-
-		// TO-DO
-		#[pallet::weight(1000)]
-		pub fn mint(
-			_origin: OriginFor<T>,
-			_transaction: Transaction
-		) -> DispatchResultWithPostInfo {
-			// TO-DO
 			Ok(().into())
 		}
 
@@ -457,7 +447,7 @@ pub mod pallet {
 		/// New IBAN has been mapped to an account
 		IbanAccountMapped(T::AccountId, IbanAccount),
 		/// IBAN has been un-mapped from an account
-		IbanAccountUnmapped(T::AccountId, IbanAccount),
+		IbanAccountUnmapped(T::AccountId, StrVecBytes),
 		/// New minted tokens to an account
 		Mint(T::AccountId, StrVecBytes, BalanceOf<T>),
 		/// New burned tokens from an account
@@ -1017,12 +1007,12 @@ impl<T: Config> Pallet<T> {
 
 		// Send request to remote endpoint
 		let body = unpeg_request(
-				&format!("{:?}", dest.unwrap_or(Self::account_id())),
-				amount_u128,
-				&to_iban.unwrap_or(b"Withdraw cash".to_vec()),
-				&reference
-			)
-			.serialize();
+			&format!("{:?}", dest.unwrap_or(Self::account_id())),
+			amount_u128,
+			&to_iban.unwrap_or(b"Withdraw cash".to_vec()),
+			&reference
+		)
+		.serialize();
 
 		log::info!("[OCW] Sending unpeg request to {}", remote_url_str);
 
@@ -1055,7 +1045,6 @@ impl<T: Config> Pallet<T> {
 		for (request_id, burn_request) in <BurnRequests<T>>::iter() {
 			// Process burn requests that are either not processed yet or failed
 			if burn_request.status == BurnRequestStatus::Pending || burn_request.status == BurnRequestStatus::Failed {
-
 				// Send unpeg request
 				match Self::unpeg(
 					request_id, 

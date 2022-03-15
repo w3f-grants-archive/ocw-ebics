@@ -24,8 +24,7 @@ sp-io = { version = "4.0.0-dev", default-features = false, git = 'https://github
 [dev-dependencies]
 pallet-balances = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest" }
 pallet-timestamp = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest" }
-httpmock = "0.6"
-mock-server = { version = "1.0.0", path = "../../mock-server" }
+pallet-sudo = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest" }
 
 [features]
 default = ['std']
@@ -41,5 +40,6 @@ std = [
 	'sp-core/std',
 	'sp-keystore',
 	'pallet-balances/std',
-	'pallet-timestamp/std'
+	'pallet-timestamp/std',
+	'pallet-sudo/std'
 ]

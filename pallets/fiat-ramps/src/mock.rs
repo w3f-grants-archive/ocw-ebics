@@ -1,12 +1,15 @@
 
 use crate::{self as fiat_ramps, crypto::Public};
 use frame_support::{
-	parameter_types,
+	parameter_types, 
 };
 use sp_core::{
     sr25519::Signature, Public as CorePublic, H256
 };
-use sp_runtime::{ testing::{Header, TestXt}, traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify}};
+use sp_runtime::{
+	testing::{Header, TestXt}, 
+	traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify}
+};
 
 pub fn get_test_accounts() -> Vec<AccountId> {
 	let alice: AccountId = AccountId::from(Public::from_slice(&[1u8; 32]));
@@ -34,6 +37,7 @@ frame_support::construct_runtime!(
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
         FiatRampsExample: fiat_ramps::{Pallet, Call, Storage, Event<T>, ValidateUnsigned},
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
+		Sudo: pallet_sudo::{Pallet, Call, Config<T>, Storage, Event<T>},
 		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
 	}
 );
@@ -114,7 +118,12 @@ parameter_types!{
 	pub const UnsignedPriority: u64 = 1000;
 	/// We set decimals for fiat currencies to 2
 	/// (e.g. 1 EUR = 1.00 EUR)
-	pub const Decimals: u8 = 2;
+	pub const Decimals: u8 = 10;
+}
+
+impl pallet_sudo::Config for Test {
+	type Event = Event;
+	type Call = Call;
 }
 
 impl fiat_ramps::Config for Test {
@@ -153,9 +162,9 @@ where
 /// Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	let mut t = frame_system::GenesisConfig::default()
-		.build_storage::<Test>()
-		.unwrap();
-	
+	.build_storage::<Test>()
+	.unwrap();
+
 	// Give initial balances for test accounts
 	pallet_balances::GenesisConfig::<Test> {
 		balances: get_test_accounts()
