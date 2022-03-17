@@ -4,7 +4,7 @@ use frame_support::{
 };
 use std::sync::Arc;
 use sp_core::{
-    offchain::{testing, OffchainWorkerExt, TransactionPoolExt}, Public as CorePublic, sr25519::Public,
+    offchain::{testing, OffchainWorkerExt, TransactionPoolExt}, Public as CorePublic, sr25519::Public, ByteArray,
 };
 use sp_keystore::{SyncCryptoStore, KeystoreExt};
 use sp_runtime::{ 
@@ -14,12 +14,13 @@ use lite_json::Serialize;
 
 use crate::{types::{
 	Transaction, IbanAccount, unpeg_request,
-	TransactionType, StrVecBytes,
+	TransactionType, StrVecBytes, Iban,
 }, BurnRequestStatus};
 use crate::helpers::{
 	ResponseTypes, StatementTypes,
 	get_mock_response,
 };
+use sp_std::convert::TryInto;
 
 use crate::mock::*;
 
@@ -213,9 +214,9 @@ fn test_iban_mapping() {
 	let bob = test_accounts[1].clone();
 	let charlie = test_accounts[2].clone();
 
-	let alice_iban = String::from("DE89370400440532013000").as_bytes().to_vec();
-	let bob_iban = String::from("DE89370400440532013001").as_bytes().to_vec();
-	let charlie_iban = String::from("DE89370400440532013002").as_bytes().to_vec();
+	let alice_iban: Iban = "CH2108307000289537320".as_bytes().try_into().expect("Failed to convert string to bytes");
+	let bob_iban: Iban = "CH1230116000289537312".as_bytes().try_into().expect("Failed to convert string to bytes");
+	let charlie_iban: Iban = "CH1230116000289537313".as_bytes().try_into().expect("Failed to convert string to bytes");
 
 	t.execute_with(|| {
 		assert_ok!(FiatRampsExample::map_iban_account(
@@ -244,9 +245,9 @@ fn test_iban_mapping() {
 			}
 		));
 
-		assert_eq!(FiatRampsExample::iban_to_account(&alice_iban), alice.clone());
-		assert_eq!(FiatRampsExample::iban_to_account(bob_iban), bob.clone());
-		assert_eq!(FiatRampsExample::iban_to_account(charlie_iban), charlie.clone());
+		assert_eq!(FiatRampsExample::iban_to_account(&alice_iban).unwrap(), alice.clone());
+		assert_eq!(FiatRampsExample::iban_to_account(bob_iban).unwrap(), bob.clone());
+		assert_eq!(FiatRampsExample::iban_to_account(charlie_iban).unwrap(), charlie.clone());
 
 		// Unmapping should work
 		assert_ok!(FiatRampsExample::unmap_iban_account(
@@ -255,8 +256,8 @@ fn test_iban_mapping() {
 		));
 		// Should be mapped to Null account (0x0000000000000000000000000000000000000000)
 		assert_eq!(
-			FiatRampsExample::iban_to_account(alice_iban), 
-			Public::from_slice(&[0u8; 32])
+			FiatRampsExample::iban_to_account(alice_iban).unwrap(), 
+			Public::from_slice(&[0u8; 32]).unwrap()
 		);
 	})
 }
@@ -285,9 +286,9 @@ fn test_burn_request() {
 	let bob = test_accounts[1].clone();
 	let charlie = test_accounts[2].clone();
 
-	let alice_iban = String::from("DE89370400440532013000").as_bytes().to_vec();
-	let bob_iban = String::from("DE89370400440532013001").as_bytes().to_vec();
-	let charlie_iban = String::from("DE89370400440532013002").as_bytes().to_vec();
+	let alice_iban: Iban = "CH2108307000289537320".as_bytes().try_into().expect("Failed to convert string to bytes");
+	let bob_iban: Iban = "CH1230116000289537312".as_bytes().try_into().expect("Failed to convert string to bytes");
+	let charlie_iban: Iban = "CH1230116000289537313".as_bytes().try_into().expect("Failed to convert string to bytes");
 
 	{
 
@@ -370,10 +371,10 @@ fn test_burn_request() {
 			amount: u128,
 			burner: &AccountId,
 			_dest_account: Option<&AccountId>,
-			dest_iban: Option<&StrVecBytes>,
+			dest_iban: Option<&Iban>,
 		) {
 			// Check if burn request has been added to the queue
-			let burn_request = FiatRampsExample::burn_request(request_counter);
+			let burn_request = FiatRampsExample::burn_request(request_counter).unwrap();
 			assert_eq!(burn_request.amount, amount);
 			assert_eq!(burn_request.burner, burner.clone());
 			assert_eq!(burn_request.dest_iban, Some(dest_iban.unwrap().clone()));
@@ -391,7 +392,7 @@ fn test_burn_request() {
 			assert_ok!(FiatRampsExample::process_burn_requests());
 
 			// Check if burn request's status has been updated
-			let burn_request = FiatRampsExample::burn_request(request_counter);
+			let burn_request = FiatRampsExample::burn_request(request_counter).unwrap();
 			assert_eq!(burn_request.status, BurnRequestStatus::Sent);
 		}
 

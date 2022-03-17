@@ -4,7 +4,7 @@ use frame_support::{
 	parameter_types, 
 };
 use sp_core::{
-    sr25519::Signature, Public as CorePublic, H256
+    sr25519::Signature, H256, ByteArray
 };
 use sp_runtime::{
 	testing::{Header, TestXt}, 
@@ -12,9 +12,9 @@ use sp_runtime::{
 };
 
 pub fn get_test_accounts() -> Vec<AccountId> {
-	let alice: AccountId = AccountId::from(Public::from_slice(&[1u8; 32]));
-	let bob: AccountId = AccountId::from(Public::from_slice(&[2u8; 32]));
-	let charlie: AccountId = AccountId::from(Public::from_slice(&[3u8; 32]));
+	let alice: AccountId = AccountId::from(Public::from_slice(&[1u8; 32]).unwrap());
+	let bob: AccountId = AccountId::from(Public::from_slice(&[2u8; 32]).unwrap());
+	let charlie: AccountId = AccountId::from(Public::from_slice(&[3u8; 32]).unwrap());
 
 	[alice, bob, charlie].to_vec()
 }
@@ -72,6 +72,7 @@ impl frame_system::Config for Test {
 	type SystemWeightInfo = ();
 	type SS58Prefix = ();
 	type OnSetCode = ();
+	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
 pub type Extrinsic = TestXt<Call, ()>;
