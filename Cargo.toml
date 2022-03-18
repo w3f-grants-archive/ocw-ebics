@@ -2,7 +2,6 @@
 members = [
     'node',
     'pallets/fiat-ramps',
-    'mock-server',
     'runtime',
 ]
 [profile.release]

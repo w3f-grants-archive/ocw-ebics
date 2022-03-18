@@ -9,23 +9,22 @@ license = "GPL-3.0-or-later"
 [dependencies]
 lite-json = { git = "https://github.com/xlc/lite-json.git", branch ="master", default-features = false }
 log = { version = "0.4.14", default-features = false }
-codec = { package = "parity-scale-codec", version = "2.2.0", default-features = false }
-scale-info = { version = "1.0", default-features = false, features = ["derive"] }
+codec = { default-features = false, features = ["derive", "max-encoded-len"], package = 'parity-scale-codec', version = '2.2.0' }
+scale-info = { default-features = false, features = ['derive'], version = "1.0" }
 
 # Substrate packages
-frame-support = { version = "4.0.0-dev", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = "devhub/latest" }
-frame-system = { version = "4.0.0-dev", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'devhub/latest' }
-sp-keystore = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest", optional = true }
-sp-std = { version = "4.0.0-dev", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'devhub/latest' }
-sp-runtime = { version = "4.0.0-dev", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'devhub/latest' }
-sp-core = { version = "4.0.0-dev", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'devhub/latest' }
-sp-io = { version = "4.0.0-dev", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'devhub/latest' }
+frame-system = { default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'devhub/latest', version = '4.0.0-dev' }
+frame-support = { default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'devhub/latest', version = '4.0.0-dev' }
+sp-keystore = { version = "0.11.0", git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest", optional = true }
+sp-std = { version = "4.0.0", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'devhub/latest' }
+sp-runtime = { version = "5.0.0", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'devhub/latest' }
+sp-core = { version = "5.0.0", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'devhub/latest' }
+sp-io = { version = "5.0.0", default-features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'devhub/latest' }
 
 [dev-dependencies]
 pallet-balances = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest" }
 pallet-timestamp = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest" }
-httpmock = "0.6"
-mock-server = { version = "1.0.0", path = "../../mock-server" }
+pallet-sudo = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest" }
 
 [features]
 default = ['std']
@@ -41,5 +40,6 @@ std = [
 	'sp-core/std',
 	'sp-keystore',
 	'pallet-balances/std',
-	'pallet-timestamp/std'
+	'pallet-timestamp/std',
+	'pallet-sudo/std'
 ]

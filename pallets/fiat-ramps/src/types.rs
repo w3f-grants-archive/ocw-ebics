@@ -1,10 +1,15 @@
+use sp_std::convert::TryInto;
+
 /// Contains Pallet types and methods
 /// Contains Transaction and IbanAccount types
-
 use crate::*;
 /// String vector bytes
 pub type StrVecBytes = Vec<u8>;
 
+/// IBAN account
+pub type Iban = [u8; 21];
+
+/// Trait for deseralizing a value from a JsonValue type
 pub trait Deserialize<T> {
     fn deserialize(value: &JsonValue) -> Option<T>;
 }
@@ -15,6 +20,17 @@ impl Deserialize<Vec<u8>> for Vec<u8> {
             .to_string()
             .map(|v| v.iter().map(|c| *c as u8).collect::<Vec<_>>())
     }
+}
+
+impl Deserialize<Iban> for Iban {
+	fn deserialize(json: &JsonValue) -> Option<Iban> {
+		let iban = json.clone()
+			.to_string()
+			.map(|v| v.iter().map(|c| *c as u8).collect::<Vec<_>>())
+			.unwrap();
+		
+		Some(iban.try_into().unwrap_or_else(|_| panic!("Invalid IBAN")))
+	}
 }
 
 impl Deserialize<u128> for u128 {
@@ -81,7 +97,7 @@ impl Default for TransactionType {
 #[derive(Encode, Decode, Clone, PartialEq, Eq, Default, RuntimeDebug, TypeInfo)]
 pub struct Transaction {
 	// from
-	pub iban: StrVecBytes,
+	pub iban: Iban,
 	pub name: StrVecBytes,
 	pub currency: StrVecBytes,
 	pub amount: u128,
@@ -92,7 +108,7 @@ pub struct Transaction {
 
 impl Transaction {
     pub fn new(
-        iban: StrVecBytes,
+        iban: Iban,
         name: StrVecBytes,
         currency: StrVecBytes,
         amount: u128,
@@ -114,7 +130,7 @@ impl Transaction {
 		let raw_object = json.as_object();
         let transaction = match raw_object {
             Some(obj) => {
-                let iban = extract_value::<StrVecBytes>("iban", obj);
+                let iban = extract_value::<Iban>("iban", obj);
                 let name = extract_value::<StrVecBytes>("name", obj);
                 let currency = extract_value::<StrVecBytes>("currency", obj);
                 let amount = extract_value::<u128>("amount", obj);
@@ -172,7 +188,7 @@ impl Transaction {
 #[derive(Encode, Decode, Clone, PartialEq, Eq, Default, RuntimeDebug, TypeInfo)]
 pub struct IbanAccount {
 	/// IBAN number of the account
-	pub iban: StrVecBytes,
+	pub iban: Iban,
 	/// Closing balance of the account
 	pub balance: u128,
 	/// Last time the statement was updated
@@ -181,7 +197,7 @@ pub struct IbanAccount {
 
 impl IbanAccount {
     pub fn new (
-        iban: StrVecBytes,
+        iban: Iban,
         balance: u128,
         last_updated: u64
     ) -> Self {
@@ -196,7 +212,7 @@ impl IbanAccount {
         let raw_object = json.as_object();
 		let iban_account = match raw_object {
 			Some(obj) => {
-				let iban = extract_value::<StrVecBytes>("iban", obj);
+				let iban = extract_value::<Iban>("iban", obj);
 				let balance = extract_value::<u128>("balanceCL", obj);
 
 				Self::new(
@@ -223,7 +239,7 @@ impl IbanAccount {
 pub fn unpeg_request(
 	dest: &str, 
 	amount: u128, 
-	iban: &StrVecBytes,
+	iban: &Iban,
 	reference: &str,
 ) -> JsonValue {
 
