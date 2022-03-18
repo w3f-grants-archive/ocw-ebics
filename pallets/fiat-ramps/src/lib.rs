@@ -253,11 +253,11 @@ pub mod pallet {
 		#[pallet::weight(1000)]
 		pub fn map_iban_account(
 			origin: OriginFor<T>,
-			iban: IbanAccount,
+			iban: Iban,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 
-			IbanToAccount::<T>::insert(who.clone(), iban.iban.clone());
+			IbanToAccount::<T>::insert(&who, &iban);
 
 			Self::deposit_event(Event::IbanAccountMapped(who, iban));
 
@@ -502,7 +502,7 @@ pub mod pallet {
 		/// A new account has been created
 		NewAccount(T::AccountId),
 		/// New IBAN has been mapped to an account
-		IbanAccountMapped(T::AccountId, IbanAccount),
+		IbanAccountMapped(T::AccountId, Iban),
 		/// IBAN has been un-mapped from an account
 		IbanAccountUnmapped(T::AccountId, Iban),
 		/// New minted tokens to an account
@@ -553,7 +553,7 @@ impl<Balance: MaxEncodedLen + Default> Default for BurnRequest<Balance> {
 	fn default() -> Self {
 		BurnRequest {
 			id: 0,
-			burner: [0; 20].into(),
+			burner: [0; 21].into(),
 			dest_iban: None,
 			amount: Default::default(),
 			status: BurnRequestStatus::Pending,
@@ -1046,7 +1046,7 @@ impl<T: Config> Pallet<T> {
 		let body = unpeg_request(
 			&format!("{:?}", burner.unwrap_or(Self::account_id())),
 			amount_u128,
-			&dest_iban.unwrap_or([0; 20]),
+			&dest_iban.unwrap_or([0; 21]),
 			&reference
 		)
 		.serialize();

@@ -14,7 +14,7 @@ use lite_json::Serialize;
 
 use crate::{types::{
 	Transaction, IbanAccount, unpeg_request,
-	TransactionType, StrVecBytes, Iban,
+	TransactionType, Iban,
 }, BurnRequestStatus};
 use crate::helpers::{
 	ResponseTypes, StatementTypes,
@@ -223,28 +223,16 @@ fn test_iban_mapping() {
 	t.execute_with(|| {
 		assert_ok!(FiatRampsExample::map_iban_account(
 			Some(alice.clone()).into(),
-			IbanAccount {
-				iban: alice_iban.clone(),
-				balance: 100,
-				last_updated: 0,
-			}
+			alice_iban.clone(),
 		));
 		assert_ok!(FiatRampsExample::map_iban_account(
 			Some(bob.clone()).into(),
-			IbanAccount {
-				iban: bob_iban.clone(),
-				balance: 100,
-				last_updated: 0,
-			}
+			bob_iban.clone()
 		));
 
 		assert_ok!(FiatRampsExample::map_iban_account(
 			Some(charlie.clone()).into(),
-			IbanAccount {
-				iban: charlie_iban.clone(),
-				balance: 100,
-				last_updated: 0,
-			}
+			charlie_iban.clone(),
 		));
 
 		assert_eq!(FiatRampsExample::get_account_id(&alice_iban).unwrap(), alice.clone());
@@ -256,10 +244,10 @@ fn test_iban_mapping() {
 			Some(alice.clone()).into(),
 			alice_iban.clone()
 		));
-		// Should be mapped to Null account (0x0000000000000000000000000000000000000000)
+		// Should be mapped to None
 		assert_eq!(
-			FiatRampsExample::get_account_id(&alice_iban).unwrap(), 
-			Public::from_slice(&[0u8; 32]).unwrap()
+			FiatRampsExample::get_account_id(&alice_iban), 
+			None
 		);
 	})
 }
@@ -293,7 +281,6 @@ fn test_burn_request() {
 	let charlie_iban: Iban = "CH1230116000289537313".as_bytes().try_into().expect("Failed to convert string to bytes");
 
 	{
-
 		let mock_unpeg_request = unpeg_request(
 		&format!("{:?}", bob),
 			10000,
@@ -404,29 +391,17 @@ fn test_burn_request() {
 		// map Alice iban
 		assert_ok!(FiatRampsExample::map_iban_account(
 			Some(alice.clone()).into(),
-			IbanAccount {
-				iban: alice_iban.clone(),
-				balance: 100,
-				last_updated: 0,
-			}
+			alice_iban.clone(),
 		));
 		// map Bob iban
 		assert_ok!(FiatRampsExample::map_iban_account(
 			Some(bob.clone()).into(),
-			IbanAccount {
-				iban: bob_iban.clone(),
-				balance: 100,
-				last_updated: 0,
-			}
+			bob_iban.clone(),
 		));
 
 		assert_ok!(FiatRampsExample::map_iban_account(
 			Some(charlie.clone()).into(),
-			IbanAccount {
-				iban: charlie_iban.clone(),
-				balance: 0,
-				last_updated: 0
-			}
+			charlie_iban.clone(),
 		));
 
 		// Pallet's balance before unpeg request

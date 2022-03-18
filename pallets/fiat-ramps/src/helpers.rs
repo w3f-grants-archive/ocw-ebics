@@ -51,7 +51,7 @@ pub fn get_mock_response(
 				}
 				StatementTypes::IncomingTransactions => {
 					// the transaction is coming from Bob to Alice
-					let bytes = br#"[{"iban":"CH2108307000289537320","balanceCL":449.00,"incomingTransactions":[{"iban":"CH4308307000289537312","name":"Bob","currency":"EUR","amount":100.00,"reference":"Purp:5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY; ourRef:none"}],"outgoingTransactions":[]}]"#.to_vec();
+					let bytes = br#"[{"iban":"CH2108307000289537320","balanceCL":449.00,"incomingTransactions":[{"iban":"CH1230116000289537312","name":"Bob","currency":"EUR","amount":100.00,"reference":"Purp:5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY; ourRef:none"}],"outgoingTransactions":[]}]"#.to_vec();
 					let parsed_statements = vec![(
 						IbanAccount {
 							iban: alice_iban.clone(),
@@ -74,7 +74,7 @@ pub fn get_mock_response(
 				StatementTypes::OutgoingTransactions => {
 					// outgoing transaction is from Bob to Alice
 					let bytes = br#"[{
-							"iban": "CH4308307000289537312",
+							"iban": "CH1230116000289537312",
 							"balanceCL": 10000000,
 							"incomingTransactions": [],
 							"outgoingTransactions": [
@@ -188,7 +188,7 @@ pub fn get_mock_response(
 							},
 							vec![
 								Transaction{
-									iban: [0; 20],
+									iban: [0; 21],
 									name: "Alice".as_bytes().to_vec(),
 									amount: 150000000000000,
 									reference: "Purp:None; ourRef: none".as_bytes().to_vec(),

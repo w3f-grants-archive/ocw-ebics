@@ -7,7 +7,7 @@ use crate::*;
 pub type StrVecBytes = Vec<u8>;
 
 /// IBAN account
-pub type Iban = [u8; 20];
+pub type Iban = [u8; 21];
 
 pub trait Deserialize<T> {
     fn deserialize(value: &JsonValue) -> Option<T>;
