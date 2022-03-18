@@ -94,14 +94,16 @@ fn should_fail_to_update_api_url_non_sudo() {
 	let bob = test_accounts[1].clone();
 	let charlie = test_accounts[2].clone();
 
+	let invalid_url: [u8; 34] = "http://127.0.0.1:8081/ebics/api-v2".as_bytes().try_into().expect("Failed to convert string to bytes");
+
 	t.execute_with(|| {
 		assert_err!(
-			FiatRampsExample::set_api_url(Some(bob).into(), "http://w36.com/api/v1/".as_bytes().to_vec()),
+			FiatRampsExample::set_api_url(Some(bob).into(), invalid_url),
 			DispatchError::BadOrigin
 		);
 
 		assert_err!(
-			FiatRampsExample::set_api_url(Some(charlie).into(), "http://w36.com/api/v1/".as_bytes().to_vec()),
+			FiatRampsExample::set_api_url(Some(charlie).into(), invalid_url),
 			DispatchError::BadOrigin
 		);
 	})
@@ -245,9 +247,9 @@ fn test_iban_mapping() {
 			}
 		));
 
-		assert_eq!(FiatRampsExample::iban_to_account(&alice_iban).unwrap(), alice.clone());
-		assert_eq!(FiatRampsExample::iban_to_account(bob_iban).unwrap(), bob.clone());
-		assert_eq!(FiatRampsExample::iban_to_account(charlie_iban).unwrap(), charlie.clone());
+		assert_eq!(FiatRampsExample::get_account_id(&alice_iban).unwrap(), alice.clone());
+		assert_eq!(FiatRampsExample::get_account_id(&bob_iban).unwrap(), bob.clone());
+		assert_eq!(FiatRampsExample::get_account_id(&charlie_iban).unwrap(), charlie.clone());
 
 		// Unmapping should work
 		assert_ok!(FiatRampsExample::unmap_iban_account(
@@ -256,7 +258,7 @@ fn test_iban_mapping() {
 		));
 		// Should be mapped to Null account (0x0000000000000000000000000000000000000000)
 		assert_eq!(
-			FiatRampsExample::iban_to_account(alice_iban).unwrap(), 
+			FiatRampsExample::get_account_id(&alice_iban).unwrap(), 
 			Public::from_slice(&[0u8; 32]).unwrap()
 		);
 	})
@@ -374,9 +376,12 @@ fn test_burn_request() {
 			dest_iban: Option<&Iban>,
 		) {
 			// Check if burn request has been added to the queue
-			let burn_request = FiatRampsExample::burn_request(request_counter).unwrap();
+			let burn_request = FiatRampsExample::burn_request(request_counter);
 			assert_eq!(burn_request.amount, amount);
-			assert_eq!(burn_request.burner, burner.clone());
+			assert_eq!(
+				FiatRampsExample::get_account_id(&burn_request.burner).unwrap(), 
+				burner.clone()
+			);
 			assert_eq!(burn_request.dest_iban, Some(dest_iban.unwrap().clone()));
 
 			// Burn amount should be transfered to Pallet's account
@@ -392,7 +397,7 @@ fn test_burn_request() {
 			assert_ok!(FiatRampsExample::process_burn_requests());
 
 			// Check if burn request's status has been updated
-			let burn_request = FiatRampsExample::burn_request(request_counter).unwrap();
+			let burn_request = FiatRampsExample::burn_request(request_counter);
 			assert_eq!(burn_request.status, BurnRequestStatus::Sent);
 		}
 

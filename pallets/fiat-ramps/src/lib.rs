@@ -37,7 +37,7 @@ use sp_runtime::{
 	},
 	offchain::storage::{MutateStorageError, StorageRetrievalError, StorageValueRef}
 };
-use sp_core::{crypto::{KeyTypeId}, ByteArray};
+use sp_core::{crypto::{KeyTypeId}};
 use sp_std::prelude::{Vec};
 use sp_runtime::{DispatchError};
 use sp_std::{ convert::{TryFrom}, vec };

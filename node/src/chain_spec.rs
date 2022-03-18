@@ -79,9 +79,11 @@ pub fn development_config() -> Result<ChainSpec, String> {
 		// Protocol ID
 		None,
 		// Properties
+		None,
 		Some(chain_properties),
 		// Extensions
 		None,
+		
 	))
 }
 
@@ -127,6 +129,7 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 		None,
 		// Properties
 		None,
+		None,
 		// Extensions
 		None,
 	))
@@ -157,7 +160,7 @@ fn testnet_genesis(
 		},
 		sudo: SudoConfig {
 			// Assign network admin rights.
-			key: root_key,
+			key: Some(root_key),
 		},
 		// transaction_payment: Default::default(),
 	}
