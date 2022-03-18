@@ -30,7 +30,7 @@ jobs:
       - name: Run coverage
         uses: actions-rs/tarpaulin@v0.1
         with:
-          version: '0.15.0'
+          version: '0.19.1'
           args: '-- --test-threads 1'
       
       - name: Upload to codecov.io
