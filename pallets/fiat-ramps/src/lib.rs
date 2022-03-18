@@ -1082,12 +1082,14 @@ impl<T: Config> Pallet<T> {
 		for (request_id, burn_request) in <BurnRequests<T>>::iter() {
 			// Process burn requests that are either not processed yet or failed
 			if burn_request.status == BurnRequestStatus::Pending || burn_request.status == BurnRequestStatus::Failed {
-				let burner = Self::get_account_id(&burn_request.burner);
+				let dest_account = Self::get_account_id(
+					&burn_request.dest_iban.unwrap_or([0; 21])
+				);
 				
 				// send the unpeg request
 				match Self::unpeg(
 					request_id, 
-					burner,
+					dest_account,
 					burn_request.dest_iban,
 					burn_request.amount
 				) {

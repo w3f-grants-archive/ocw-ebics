@@ -9,6 +9,7 @@ pub type StrVecBytes = Vec<u8>;
 /// IBAN account
 pub type Iban = [u8; 21];
 
+/// Trait for deseralizing a value from a JsonValue type
 pub trait Deserialize<T> {
     fn deserialize(value: &JsonValue) -> Option<T>;
 }

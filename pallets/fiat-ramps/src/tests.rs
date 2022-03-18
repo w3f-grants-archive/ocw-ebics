@@ -355,7 +355,7 @@ fn test_burn_request() {
 	t.execute_with(|| {
 		// Local counter to keep track of the number of burn requests
 		fn check_burn_request(
-			previous_pallet_balance: u128,
+			initial_pallet_balance: u128,
 			request_counter: u64,
 			amount: u128,
 			burner: &AccountId,
@@ -377,7 +377,7 @@ fn test_burn_request() {
 			// We can tag the burn request as confirmed and send funds to the destination account
 			assert_eq!(
 				Balances::free_balance(FiatRampsExample::account_id()), 
-				previous_pallet_balance + amount
+				initial_pallet_balance + amount
 			);
 			
 			// Trigger processing of burn requests	
