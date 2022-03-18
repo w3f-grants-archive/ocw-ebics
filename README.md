@@ -1,3 +1,5 @@
+[![codecov](https://codecov.io/gh/element36-io/ocw-ebics/branch/main/graph/badge.svg?token=OM30W9AF7U)](https://codecov.io/gh/element36-io/ocw-ebics)
+
 # Ebics Off-chain Worker Substrate pallet
 
 Contains a fork of Substrate node-template and a offchain worker pallet.
