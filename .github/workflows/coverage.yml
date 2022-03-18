@@ -1,4 +1,4 @@
-name: Run Unit Tests
+name: Run Coverage
 
 on:
   push:
@@ -24,5 +24,13 @@ jobs:
           rustup update nightly
           rustup update stable
           rustup target add wasm32-unknown-unknown --toolchain nightly
-      - name: Run tests
-        run: cargo test
+      - name: Run coverage
+        uses: actions-rs/tarpaulin@v0.1
+        with:
+          version: '0.19.1'
+          args: '-- --test-threads 1 --manifest-path ./pallets/fiat-ramps/Cargo.toml'
+      
+      - name: Upload to codecov.io
+        uses: codecov/codecov-action@v1.0.2
+        with:
+          token: ${{secrets.CODECOV_TOKEN}}
