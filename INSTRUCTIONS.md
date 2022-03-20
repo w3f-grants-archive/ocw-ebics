@@ -69,7 +69,17 @@ Once offchain worker has processed new statements, two `Transfer` events occur:
 
 #### Alice transfers to Charlie via Extrinsic
 
-We go to `Extrinsic` tab and choose `transfer`
+We go to `Extrinsic` tab and choose `transferToAddress` extrinsic call.
+
+![Extrinsic from Alice to Charlie](/assets/alice-charlie-ext.png)
+
+After we submit extrinsic, we can see that the burn request event is created.
+
+![Extrinsic from Alice to Charlie](/assets/alice-charlie-event-request.png)
+
+Shortly after (approximately 3-4 blocks), we can notice that the burn request has been processed and transfer between Alice and Charlie occurs. Notice that transfer occurs from an unknown wallet to Charlie, not directly from Alice to Charlie. This is offchain worker's account that stores the funds until transaction is finalized by LibEUfin backend.
+
+![Extrinsic from Alice to Charlie](/assets/alice-charlie-transfer.png)
 
 ## Fiat on/off ramp workflow
 
