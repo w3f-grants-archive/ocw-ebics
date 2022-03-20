@@ -55,19 +55,21 @@ Once you have submitted the call, head over to `Extrinsics -> fiatRamps -> mapIb
 
 Once you are done with connecting test accounts to their IBAN numbers, we can proceed to testing how transfering, minting and burning works.
 
-#### Alice transfers to Charlie
+#### Alice transfers to Charlie via EBICS API
 
 To make a transfer from Alice to Charlie, we head over to our EBICS service [API](http://w.e36.io:8093/ebics/swagger-ui/?url=/ebics/v2/api-docs/#/). We open `/ebics/api-v1/createOrder` tab and fill out Charlie's details. Namely, we will `purpose` field with Charlie's on-chain account and `receipientIban` field with his IBAN number. And `sourceIban` field with Alice's IBAN number. We can then specify the amount and other fields. It should look similar to this:
 
 ![Alice transfer to Charlie](/assets/alice-transfer-charlie.png)
 
-This will create a new order and will end up in Alice's bank statement as outgoing transaction. And when our offchain worker queries bank statements, it will parse Charlie's on-chain account from `reference` field or query it from storage using his IBAN number. Note that transfer on-chain won't happen instantly, since offchain worker performs activities within a minimum of 5 block times interval (~30 seconds) and there are 3 types of actions. So, there is around 90 seconds of time between each new bank statements processing. 
+This will create a new order and will end up in Alice's bank statement as an outgoing transaction. And when our offchain worker queries bank statements, it will parse Charlie's on-chain account from `reference` field or query it from storage using his IBAN number. Note that transfer on-chain won't happen instantly, since offchain worker performs activities within a minimum of 5 block times interval (~30 seconds) and there are 3 types of actions. So, there is around 90 seconds of time between each new bank statements processing. 
 
 Once offchain worker has processed new statements, two `Transfer` events occur:
 
 ![Transfer from Alice to Charlie](/assets/alice-bob-events.png)
 
-#### Bob 
+#### Alice transfers to Charlie via Extrinsic
+
+We go to `Extrinsic` tab and choose `transfer`
 
 ## Fiat on/off ramp workflow
 
@@ -82,6 +84,20 @@ Below is the workflow for easily ramping on and off to our chain:
   - Burn funds to account, i.e transfer funds to another account on-chain
 
 In order to move funds from their bank account, EBICS users call `/unpeg` API call providing neccessary recipient details.
+
+Our pallet exposes three extrinsics that can be used to transfer or withdraw funds from the bank account that supports EBICS standard. The following extrinsics are available:
+
+- `burn` - used for simply withdrawing money from the bank account  
+- `transferToAddress` - transfers funds to a given address. This will extract IBAN that is mapped to the address from the pallet storage and makes `unpeg` request to the NEXUS API.  
+- `transferToIban` - Simply transfers funds to the given IBAN. This also makes `unpeg` request to the NEXUS API.
+
+It is important to note that transferring or withdrawing is not a synchronous process. This is because finality of transactions in EBICS standard is not instant. To handle this issue, our pallet also serves as escrow.
+
+Whenever someone calls one of the above extrinsics, an `amount` of the transfer is transferred to Pallet's account and a new `BurnRequest` instance is created. `BurnRequest` struct contains id, source, destination and amount of the transfer.
+
+The reason why we don't instantly send `unpeg` request to the API, is that we can't send HTTP call outside of Offchain Worker context. Therefore we store requests to *burn* funds from bank account and offchain worker processes it later. For each burn request, an `unpeg` request is sent.
+
+Burn request is removed from the storage once the transaction is confirmed by EBICS API, i.e when it ends up as an outgoing transaction in the bank statement.
 
 ### Bank Statement
 
