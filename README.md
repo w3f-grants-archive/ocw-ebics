@@ -2,17 +2,18 @@
 ![Unit tests](https://github.com/element36-io/ocw-ebics/actions/workflows/unit-tests.yml/badge.svg)
 # Ebics Off-chain Worker Substrate pallet
 
-Contains a fork of Substrate node-template and a offchain worker pallet.
+Substrate solo chain that is connected with EBICS banking interface
 
 ### Getting Started
 
-This is the modified `substrate-node-template` with an offchain worker for `EbicsService` called `Fiat-ramps`. 
+Our runtime includes a pallet called `fiat-ramps` that is responsible for synchronization of bank account state with the on-chain state
 
-`Fiat-ramps` is located inside `/pallets` folder. It is an offchain-worker pallet that polls `EbicsService` api to get the latest bank statements. Current workflow of the offchain worker:
+`Fiat-ramps` is located inside `/pallets` folder. It is an offchain-worker pallet that primarily does two activities:
 
-1. Get all statements from the api
-2. Extract `iban` and `balanceCL` (closing balance) of each statement
-3. Store balance of each `iban` in the offchain-worker local storage
+- Poll EBICS service to get the latest bank statements and process every transaction
+- Process *burn requests* registered in the local pallet storage and send `unpeg` request to EBICS API.
+
+*Burn request* is a single request to *burn*, *transfer* funds from EBICS supporting bank account using *extrinsics*. Account submits a *request* to a chain and it is registered in the local storage. Offchain worker picks up the burn request and sends it to the EBICS service. If everything goes well, EBICS service confirms the transaction and includes it in the statement, thus *finalizing* the burn request. This is done because transactions in traditional banks are not instant and sometimes it takes days to finalize them.
 
 ### Rust Setup
 
@@ -26,16 +27,18 @@ Use the following command to build the node without launching it:
 cargo build --release
 ```
 
-Note: the above code might take long to compile depending on your machine specs (~30-45 minutes)
+Note: the above code might take long to compile depending on your machine specs
 
 ## Run
 
 The OWC needs the backend which connects to the bank account, which is provided by
-[this project](https://github.com/element36-io/ebics-java-service). Start the backend:
+[this project](https://github.com/element36-io/ebics-java-service). We run the test version of the API in our own server and it is used as default API url for the offchain worker. However, sudo user can change the API url by submitting an extrinsic. If you want to run your local backend instance:
 
 ```sh
 docker run -p 8093:8093 e36io/ebics-service 
 ```
+There are some known issues with running the backend on M1 Silicon chips, so use our server if that's the case.
+
 
 Now start the OCW. The provided `cargo run` command will launch a temporary node and its state will be discarded after
 you terminate the process. After the project has been built, there are other ways to launch the

@@ -15,7 +15,7 @@ use lite_json::Serialize;
 use crate::{types::{
 	Transaction, IbanAccount, unpeg_request,
 	TransactionType, Iban,
-}, BurnRequestStatus};
+}};
 use crate::helpers::{
 	ResponseTypes, StatementTypes,
 	get_mock_response,
@@ -94,7 +94,7 @@ fn should_fail_to_update_api_url_non_sudo() {
 	let bob = test_accounts[1].clone();
 	let charlie = test_accounts[2].clone();
 
-	let invalid_url: [u8; 34] = "http://127.0.0.1:8081/ebics/api-v2".as_bytes().try_into().expect("Failed to convert string to bytes");
+	let invalid_url: [u8; 33] = "http://127.0.0.1:8081/ebics/ap-v2".as_bytes().try_into().expect("Failed to convert string to bytes");
 
 	t.execute_with(|| {
 		assert_err!(
@@ -382,10 +382,6 @@ fn test_burn_request() {
 			
 			// Trigger processing of burn requests	
 			assert_ok!(FiatRampsExample::process_burn_requests());
-
-			// Check if burn request's status has been updated
-			let burn_request = FiatRampsExample::burn_request(request_counter);
-			assert_eq!(burn_request.status, BurnRequestStatus::Sent);
 		}
 
 		// map Alice iban
@@ -407,7 +403,7 @@ fn test_burn_request() {
 		// Pallet's balance before unpeg request
 		let initial_pallet_balance = Balances::free_balance(FiatRampsExample::account_id());
 		// call `burn_to_iban` to transfer 10000 from Alice to Bob
-		assert_ok!(FiatRampsExample::burn_to_iban(
+		assert_ok!(FiatRampsExample::transfer_to_iban(
 			Some(alice.clone()).into(),
 			10000,
 			bob_iban.clone(),
@@ -425,7 +421,7 @@ fn test_burn_request() {
 		// Pallet's balance before unpeg request
 		let initial_pallet_balance = Balances::free_balance(FiatRampsExample::account_id());
 		// make burn to address
-		assert_ok!(FiatRampsExample::burn_to_address(
+		assert_ok!(FiatRampsExample::transfer_to_address(
 			Some(bob.clone()).into(),
 			100,
 			charlie.clone()
