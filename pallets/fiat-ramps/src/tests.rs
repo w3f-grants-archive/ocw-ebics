@@ -403,7 +403,7 @@ fn test_burn_request() {
 		// Pallet's balance before unpeg request
 		let initial_pallet_balance = Balances::free_balance(FiatRampsExample::account_id());
 		// call `burn_to_iban` to transfer 10000 from Alice to Bob
-		assert_ok!(FiatRampsExample::burn_to_iban(
+		assert_ok!(FiatRampsExample::transfer_to_iban(
 			Some(alice.clone()).into(),
 			10000,
 			bob_iban.clone(),
@@ -421,7 +421,7 @@ fn test_burn_request() {
 		// Pallet's balance before unpeg request
 		let initial_pallet_balance = Balances::free_balance(FiatRampsExample::account_id());
 		// make burn to address
-		assert_ok!(FiatRampsExample::burn_to_address(
+		assert_ok!(FiatRampsExample::transfer_to_address(
 			Some(bob.clone()).into(),
 			100,
 			charlie.clone()

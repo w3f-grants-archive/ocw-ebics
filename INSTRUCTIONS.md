@@ -22,7 +22,7 @@ suri: cup swing hill dinner pioneer mom stick steel sad raven oak practice
 public_key: 5C555czPfaHgYhKhsRg2KNCLGCJ82jVsvweTHAnfvT83uy5T
 ```
 
-Once you have submitted the call, head over to `Extrinsics -> fiatRamps -> mapIbanAccount` call. Here we need to map Alice, Bob and Charlie's accounts with their respective IBAN numbers, which are given below. Please, make sure to select the correct signer account for each IBAN number.
+Once you have submitted the call, head over to `Extrinsics -> fiatRamps -> mapIbanAccount` call. Here we need to map Alice's IBAN number to his on-chain account address. Simply choose Alice as a signer and the  copy and paste value of the IBAN number from the following JSON file and submit the extrinsic.
 
 ```json
 {
@@ -30,32 +30,49 @@ Once you have submitted the call, head over to `Extrinsics -> fiatRamps -> mapIb
     "ownerName" : "Alice",
     "iban" : "CH2108307000289537320",
     "accountId": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-    "bic" : "HYPLCH22570",
-    "offeredAccountId" : "accountname1",
     "nexusBankAccountId" : "CH2108307000289537320"
   }, {
     "ownerName" : "Bob",
     "iban" : "CH1230116000289537312",
     "accountId": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-    "bic" : "HYPLCH22572",
-    "offeredAccountId" : "accountname2",
     "nexusBankAccountId" : "CH1230116000289537312"
   }, {
     "ownerName" : "Charlie",
     "iban" : "CH1230116000289537313",
     "accountId": "5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y",
-    "bic" : "HYPLCH22573",
-    "offeredAccountId" : "accountname3",
     "nexusBankAccountId" : "CH1230116000289537313"
   } ]
 }
 ```
 
-![Bob connecting his bank account](/assets/bob-map-iban.png)
+![Alice connecting her bank account](/assets/alice-map-account.png)
 
-Once you are done with connecting test accounts to their IBAN numbers, we can proceed to testing how transfering, minting and burning works.
+#### Stablecoins are minted to Alice
+
+Stablecoins are minted only when offchain worker detects an incoming transaction from an unknown IBAN address, i.e from an IBAN address is not mapped to any on-chain account address. In order to see how it works in action, head over to the EBICS service [API](http://w.e36.io:8093/ebics/swagger-ui/?url=/ebics/v2/api-docs/#/). Open `/ebics/api-v1/createOrder` tab and fill out Charlie's details. Namely, we will `purpose` field with Alice's on-chain account and `receipientIban` field with her IBAN number. Fill out Charlie's IBAN from above JSON file as the `sourceIban`. Finally, execute the call. It should look something like this:
+
+![Alice mints](/assets/ebics-minting.png)
+
+Then wait a little bit until offchain worker picks up the statement. After some time (3-5 blocktimes) you should see that new tokens were minted:
+
+![Mint event happens](/assets/ocw-minting.png)
+
+This is how new stablecoins are minted in our chain.
+
+### Stablecoins are burned from Alice
+
+Now, in order to see how burning works, we can either go to EBICS service again and call `/ebics/api-v1/unpeg` request or submit `transferToAddress`/`transferToIban` extrinsic. Let's use EBICS service again, as extrinsic calls are covered in the next demos. After filling up the `recipientIban` field with Charlie's IBAN, our call should look like this:
+
+![Alice burns](/assets/ebics-burning.png)
+
+Again, we wait for offchain worker to process the statement and shortly after we should see that it emits a Burn event:
+
+![Burn event happens](/assets/ocw-burning.png)
 
 #### Alice transfers to Charlie via EBICS API
+For this part of the tutorial we will need to map Charlie and Bob's IBAN numbers to their on-chain account addresses. We submit `mapIbanAccount` extrinsic with IBAN addresses of Charlie and Bob, respectively, making sure that they are signing the extrinsic call. For example, Bob mapping his account would look like this:
+
+![Bob connects his account](/assets/bob-map-iban.png)
 
 To make a transfer from Alice to Charlie, we head over to our EBICS service [API](http://w.e36.io:8093/ebics/swagger-ui/?url=/ebics/v2/api-docs/#/). We open `/ebics/api-v1/createOrder` tab and fill out Charlie's details. Namely, we will `purpose` field with Charlie's on-chain account and `receipientIban` field with his IBAN number. And `sourceIban` field with Alice's IBAN number. We can then specify the amount and other fields. It should look similar to this:
 
@@ -69,7 +86,7 @@ Once offchain worker has processed new statements, two `Transfer` events occur:
 
 #### Alice transfers to Charlie via Extrinsic
 
-We go to `Extrinsic` tab and choose `transferToAddress` extrinsic call.
+We go to `Extrinsic` tab and choose `transferToAddress` extrinsic call. Fill out the necessary fields and make sure that the amount is a positive number, otherwise extrinsic will fail.
 
 ![Extrinsic from Alice to Charlie](/assets/alice-charlie-ext.png)
 
