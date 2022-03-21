@@ -2,6 +2,36 @@
 
 This document describes in-depth how our chain functions and how to test it out.
 
+## Fiat on/off ramp workflow
+
+FiatRamps is a chain that aims to connect EBICS banking interface to Polkadot ecosystem. In order to accomplish it, we utilise Substrate offchain-workers. With the help of offchain-workers, our node syncs with our EBICS server and EBICS Java service. And with mapping our bank account to an `account` chain, we get an easy way to ramp on and off from chain.
+
+Below is the workflow for easily ramping on and off to our chain:
+
+- First and foremost, every user that wants to connect their bank account to FiatRamps, needs to call `map_iban_account` extrinsic
+- Once on-chain account is mapped to off-chain bank account, user can perform following actions:
+  - Burn funds, aka withdraw from bank account
+  - Burn funds to IBAN, i.e transfer funds to another IBAN account
+  - Burn funds to account, i.e transfer funds to another account on-chain
+
+In order to move funds from their bank account, EBICS users call `/unpeg` API call providing neccessary recipient details.
+
+Our pallet exposes three extrinsics that can be used to transfer or withdraw funds from the bank account that supports EBICS standard. The following extrinsics are available:
+
+- `burn` - used for simply withdrawing money from the bank account  
+- `transferToAddress` - transfers funds to a given address. This will extract IBAN that is mapped to the address from the pallet storage and makes `unpeg` request to the NEXUS API.  
+- `transferToIban` - Simply transfers funds to the given IBAN. This also makes `unpeg` request to the NEXUS API.
+
+It is important to note that transferring or withdrawing is not a synchronous process. This is because finality of transactions in EBICS standard is not instant. To handle this issue, our pallet also serves as escrow.
+
+Whenever someone calls one of the above extrinsics, an `amount` of the transfer is transferred to Pallet's account and a new `BurnRequest` instance is created. `BurnRequest` struct contains id, source, destination and amount of the transfer.
+
+The reason why we don't instantly send `unpeg` request to the API, is that we can't send HTTP call outside of Offchain Worker context. Therefore we store requests to *burn* funds from bank account and offchain worker processes it later. For each burn request, an `unpeg` request is sent.
+
+Burn request is removed from the storage once the transaction is confirmed by EBICS API, i.e when it ends up as an outgoing transaction in the bank statement.
+
+Below is a tutorial that demonstrates how our Substrate solo chain works.
+
 ## Setup
 
 To get started, obviously make sure you have the necessary setup for Substrate development.
@@ -30,17 +60,14 @@ Once you have submitted the call, head over to `Extrinsics -> fiatRamps -> mapIb
     "ownerName" : "Alice",
     "iban" : "CH2108307000289537320",
     "accountId": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-    "nexusBankAccountId" : "CH2108307000289537320"
   }, {
     "ownerName" : "Bob",
     "iban" : "CH1230116000289537312",
     "accountId": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-    "nexusBankAccountId" : "CH1230116000289537312"
   }, {
     "ownerName" : "Charlie",
     "iban" : "CH1230116000289537313",
     "accountId": "5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y",
-    "nexusBankAccountId" : "CH1230116000289537313"
   } ]
 }
 ```
@@ -74,6 +101,8 @@ For this part of the tutorial we will need to map Charlie and Bob's IBAN numbers
 
 ![Bob connects his account](/assets/bob-map-iban.png)
 
+It is also very important to know that we can not use PolkadotJS transfer button to move funds in our chain. This would break synchronization between the bank account balance and on-chain balance. In the future it should be disabled and the only way to transfer should be via burn requests.
+
 To make a transfer from Alice to Charlie, we head over to our EBICS service [API](http://w.e36.io:8093/ebics/swagger-ui/?url=/ebics/v2/api-docs/#/). We open `/ebics/api-v1/createOrder` tab and fill out Charlie's details. Namely, we will `purpose` field with Charlie's on-chain account and `receipientIban` field with his IBAN number. And `sourceIban` field with Alice's IBAN number. We can then specify the amount and other fields. It should look similar to this:
 
 ![Alice transfer to Charlie](/assets/alice-transfer-charlie.png)
@@ -97,65 +126,3 @@ After we submit extrinsic, we can see that the burn request event is created.
 Shortly after (approximately 3-4 blocks), we can notice that the burn request has been processed and transfer between Alice and Charlie occurs. Notice that transfer occurs from an unknown wallet to Charlie, not directly from Alice to Charlie. This is offchain worker's account that stores the funds until transaction is finalized by LibEUfin backend.
 
 ![Extrinsic from Alice to Charlie](/assets/alice-charlie-transfer.png)
-
-## Fiat on/off ramp workflow
-
-FiatRamps is a chain that aims to connect EBICS banking interface to Polkadot ecosystem. In order to accomplish it, we utilise Substrate offchain-workers. With the help of offchain-workers, our node syncs with our EBICS server and EBICS Java service. And with mapping our bank account to an `account` chain, we get an easy way to ramp on and off from chain.
-
-Below is the workflow for easily ramping on and off to our chain:
-
-- First and foremost, every user that wants to connect their bank account to FiatRamps, needs to call `map_iban_account` extrinsic
-- Once on-chain account is mapped to off-chain bank account, user can perform following actions:
-  - Burn funds, aka withdraw from bank account
-  - Burn funds to IBAN, i.e transfer funds to another IBAN account
-  - Burn funds to account, i.e transfer funds to another account on-chain
-
-In order to move funds from their bank account, EBICS users call `/unpeg` API call providing neccessary recipient details.
-
-Our pallet exposes three extrinsics that can be used to transfer or withdraw funds from the bank account that supports EBICS standard. The following extrinsics are available:
-
-- `burn` - used for simply withdrawing money from the bank account  
-- `transferToAddress` - transfers funds to a given address. This will extract IBAN that is mapped to the address from the pallet storage and makes `unpeg` request to the NEXUS API.  
-- `transferToIban` - Simply transfers funds to the given IBAN. This also makes `unpeg` request to the NEXUS API.
-
-It is important to note that transferring or withdrawing is not a synchronous process. This is because finality of transactions in EBICS standard is not instant. To handle this issue, our pallet also serves as escrow.
-
-Whenever someone calls one of the above extrinsics, an `amount` of the transfer is transferred to Pallet's account and a new `BurnRequest` instance is created. `BurnRequest` struct contains id, source, destination and amount of the transfer.
-
-The reason why we don't instantly send `unpeg` request to the API, is that we can't send HTTP call outside of Offchain Worker context. Therefore we store requests to *burn* funds from bank account and offchain worker processes it later. For each burn request, an `unpeg` request is sent.
-
-Burn request is removed from the storage once the transaction is confirmed by EBICS API, i.e when it ends up as an outgoing transaction in the bank statement.
-
-### Bank Statement
-
-Each bank statement has at least four fields: `iban`, `balanceCL`, `incomingStatements` and `outgoingStatements`. A bank statement in our pallet is represented as the combination of `IbanAccount` and `Transaction` types:
-
-```rust
-pub struct IbanAccount {
-    /// IBAN number of the account
-	pub iban: StrVecBytes,
-	/// Closing balance of the account
-	pub balance: u128,
-	/// Last time the statement was updated
-	pub last_updated: u64
-}
-
-pub struct Transaction {
-    /// IBAN of the sender, if tx is incoming, IBAN of the receiver, otherwise
-	pub iban: StrVecBytes,
-    /// Name of the sender, if tx is incoming, name of the receiver, otherwise
-	pub name: StrVecBytes,
-    /// Currency of the transaction
-	pub currency: StrVecBytes,
-    /// Amount of the transaction. Note that our token has 6 decimals
-	pub amount: u128,
-	/// Usually contains the on-chain accountId of the destination and/or burn request nonce
-	pub reference: StrVecBytes,
-    /// Type of the transaction: Incoming or Outgoing
-	pub tx_type: TransactionType
-}
-```
-
-### Offchain worker
-
-Offchain worker performs two activities: process new statements and process burn requests. Burn requests are 
