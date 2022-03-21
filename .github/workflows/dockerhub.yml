@@ -1,4 +1,7 @@
-on: [push, pull_request]
+on:
+  push:
+    branches:
+    - main
 jobs:
   push_to_dockerhub:
     name: build image and push to dockerhub
