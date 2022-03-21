@@ -49,7 +49,7 @@ fn test_processing(
 		statement_type.clone()
 	);
 
-	let statements_endpoint = "http://127.0.0.1:8081/ebics/api-v1/bankstatements".to_string();
+	let statements_endpoint = "http://w.e36.io:8093/ebics/api-v1/bankstatements".to_string();
 
 	ebics_server_response(&mut state.write(),
 		testing::PendingRequest {
@@ -121,7 +121,7 @@ fn should_make_http_call_and_parse() {
 		StatementTypes::IncomingTransactions
 	);
 
-	let statements_endpoint = "http://127.0.0.1:8081/ebics/api-v1/bankstatements".to_string();
+	let statements_endpoint = "http://w.e36.io:8093/ebics/api-v1/bankstatements".to_string();
 
 	ebics_server_response(&mut state.write(),
 		testing::PendingRequest {
@@ -134,7 +134,7 @@ fn should_make_http_call_and_parse() {
 	);
 
 	t.execute_with(|| {
-		let response = FiatRampsExample::fetch_json("http://127.0.0.1:8081/ebics/api-v1".as_bytes()).unwrap();
+		let response = FiatRampsExample::fetch_json("http://w.e36.io:8093/ebics/api-v1".as_bytes()).unwrap();
 		let raw_array = response.as_array();
 		
 		let statements = match raw_array {
@@ -305,7 +305,7 @@ fn test_burn_request() {
 		)
 		.serialize();
 	
-		let unpeg_endpoint = "http://127.0.0.1:8081/ebics/api-v1/unpeg";
+		let unpeg_endpoint = "http://w.e36.io:8093/ebics/api-v1/unpeg";
 
 		ebics_server_response(&mut state.write(),
 			testing::PendingRequest {

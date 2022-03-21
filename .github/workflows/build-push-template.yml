@@ -4,6 +4,7 @@ on:
   push:
     branches:
     - master
+    - milestone-2
 
 jobs:
   build-push-template:
