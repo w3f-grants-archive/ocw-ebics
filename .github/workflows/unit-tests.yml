@@ -4,7 +4,6 @@ on:
   push:
     branches:
     - main
-    - milestone-2
 
 jobs:
   build-node-template:
