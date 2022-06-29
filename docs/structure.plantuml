@@ -1,0 +1,41 @@
+@startuml data
+
+
+entity  unpeg_request { 
+    	dest: &str, 
+	amount: u128, 
+	iban: &Iban,
+	reference: &str
+}
+
+entity  IbanAccount {
+	/// IBAN number of the account
+	pub iban: Iban,
+	/// Closing balance of the account
+	pub balance: u128,
+	/// Last time the statement was updated
+	pub last_updated: u64
+}
+
+enum TransactionType {
+	Incoming,
+	Outgoing,
+	None
+}
+
+entity Transaction {
+	// from
+	pub iban: Iban,
+	pub name: StrVecBytes,
+	pub currency: StrVecBytes,
+	pub amount: u128,
+	// to
+	pub reference: StrVecBytes,
+	pub tx_type: TransactionType
+}
+
+entity OCW-Instance {
+    
+}
+@enduml
+
