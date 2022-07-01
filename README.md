@@ -104,11 +104,11 @@ Following test accounts are for Alice, Bob and Charlie, respectively.
     "nexusBankAccountId" : "CH1230116000289537312"
   }, {
     "ownerName" : "Charlie",
-    "iban" : "CH1230116000289537313",
+    "iban" : "CH2108307000289537313",
     "accountId": "5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y",
     "bic" : "HYPLCH22573",
     "offeredAccountId" : "accountname3",
-    "nexusBankAccountId" : "CH1230116000289537313"
+    "nexusBankAccountId" : "CH2108307000289537313"
   } ]
 }
 ```

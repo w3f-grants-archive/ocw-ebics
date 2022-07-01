@@ -218,7 +218,7 @@ fn test_iban_mapping() {
 
 	let alice_iban: Iban = "CH2108307000289537320".as_bytes().try_into().expect("Failed to convert string to bytes");
 	let bob_iban: Iban = "CH1230116000289537312".as_bytes().try_into().expect("Failed to convert string to bytes");
-	let charlie_iban: Iban = "CH1230116000289537313".as_bytes().try_into().expect("Failed to convert string to bytes");
+	let charlie_iban: Iban = "CH2108307000289537313".as_bytes().try_into().expect("Failed to convert string to bytes");
 
 	t.execute_with(|| {
 		assert_ok!(FiatRampsExample::map_iban_account(
@@ -278,7 +278,7 @@ fn test_burn_request() {
 
 	let alice_iban: Iban = "CH2108307000289537320".as_bytes().try_into().expect("Failed to convert string to bytes");
 	let bob_iban: Iban = "CH1230116000289537312".as_bytes().try_into().expect("Failed to convert string to bytes");
-	let charlie_iban: Iban = "CH1230116000289537313".as_bytes().try_into().expect("Failed to convert string to bytes");
+	let charlie_iban: Iban = "CH2108307000289537313".as_bytes().try_into().expect("Failed to convert string to bytes");
 
 	{
 		let mock_unpeg_request = unpeg_request(
