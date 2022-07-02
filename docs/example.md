@@ -1,4 +1,9 @@
-# Installation
+# Use cases and examples
+
+Please read cases carefully - our fiat bridge supports anyone with a bank account to process
+"direct payments" from other bank bank accounts,  wallet addresses and smart contracts.  
+These use cases are currently not offered by the existing ecosystem - this requires 
+new thinking about the topic of fiat on- and off-ramping.
 
 ## The Actors
 
@@ -20,9 +25,9 @@ We assume alice already has 100 Euro on the bank account before setting up the F
 Bob offers an NFT for 5 pEURO. He creates an account and maps his IBAN bank account to his wallet. The OCW
 has his IBAN now stored. The balance of Bob's wallet is 0 pEURO.
 
-## Charly does FIAT-onboarding - changes 50 EUROs to 50 pEURO
+## Charly does FIAT-onboarding - changes 50 EURO to 50 pEURO
 
-Charly onboards with Alice, maps her bank account with her wallet. Now she wants to load her wallet with 50 pEURO. She sends 50 Euros to Alice via wire transfer. As the money arrives on Alice's bank account, following happens:
+Charly onboards with Alice NFT platform, add her bank account (IBAN) number, which maps with her wallet address to her IBAN on the OCW by calling the extrinsic 'fiatRamps.mapIbanAccount(iban)'. Now she wants to load her wallet with 50 pEURO. She sends 50 Euros to Alice via wire transfer. As the money arrives on Alice's bank account, following happens:
 
 - The OCW sees the incoming transaction from Charly of 50 EURO and that the balance of the bank account is now 100 EURO.
 - The total amount of pEURO should be soon 150, if everything is set up correctly.
