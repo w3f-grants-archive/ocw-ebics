@@ -1,11 +1,9 @@
----
-title: Example use cases - NFT shop
----
+# Installation
 
 ## The Actors
 
 - Alice: Operates an NFT-shop with a Fiat-Bridge where anyone can sell or buy NFTs with Fiat-Money. She "owns" the bridge, the bank account and set up access to the bank account.
-- Bob: Wants to sell an NFT. He creates an account on Alice Platform, uploads and NFT and ask for 5 Euros for each NFT.
+- Bob: Wants to sell an NFT. He creates an account on Alice Platform, uploads his NFTs and ask for 5 Euros each.
 - Charly: Wants to buy the NFT, he also created an account on Alice NFT platform.
 - Dave: He likes the work of Bob - he has no web3 wallet and is not into crypto.
  He just wants to support Bob's work with real cash, and maybe claim the NFTs later. 
@@ -13,16 +11,14 @@ title: Example use cases - NFT shop
 Remark: The bridge may or may not accept payments from Dave to to compliance reasons, this shows 
 technical feasability that users do not have be registered for on- or off-ramping.
 
-## Set up the Bridge
+## Alice is setting up the Bridge
 
-We assume alice already has 100 Euro on the bank account before setting up the bridge. After Alice sets up the
-bridge and after first time reading the bank-statement, here balance of pEURO is 100 and the total amount of pEURO
-is 100.
+We assume alice already has 100 Euro on the bank account before setting up the Fita bridge for Alice NFT platform. After Alice sets up the bridge and after first time reading the bank-statement, here balance of pEURO is 100 and the total amount of pEURO is 100.
 
 ## Bob offers an NFT
 
 Bob offers an NFT for 5 pEURO. He creates an account and maps his IBAN bank account to his wallet. The OCW
-has his IBAN now stored. The balance of Bob's wallet is  0 pEURO.
+has his IBAN now stored. The balance of Bob's wallet is 0 pEURO.
 
 ## Charly does FIAT-onboarding - changes 50 EUROs to 50 pEURO
 
@@ -47,7 +43,7 @@ NFTs and sees Bob's fancy NFT.
 The Bridge or bank accounts are not involved. The total balance is still unchanged at 150 pEURO, 
 and also bank account balance is at 150 EURO.
 
-Remark: Charly could have send Fiat funds directly to Bob as well - without loading her wallet.
+Important Remark: Charly could have send Fiat funds directly to Bob as well - without loading her wallet.
 Check out Dave's case.
 
 ## Bob does a "cash-out" - off-ramp
@@ -91,3 +87,12 @@ Dave, because he never registered on the NFT platform.
   of the bank transaction which points to Bobs wallet address. 
 - The OCW mints 10 pEURO into Bobs wallet. 
 - Total amount of pEURO is now 155.
+
+Remark: The OWC has recorded the transfer of funds. If Dave later on is able to work
+with web3 wallets and to connect his wallet to the NFT platform, he would be able
+to claim a discount or NFT tokens based on his Fiat payment, if he connects his
+IBAN account with his web3 account by onboarding to Alice platform.  But a 
+lot more use cases are possbile combining wire transfers with on-chain 
+smart contracts or web3 wallets. Basically the fiat bridge akts as a gateway to the fiat
+world but also as an oracle. You can proove that fiat funds where sent and build
+smart contracts on these facts. 
