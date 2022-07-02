@@ -1,8 +1,7 @@
 # Use cases and examples
 
 Please read cases carefully - our fiat bridge supports anyone with a bank account to process
-"direct payments" from other bank bank accounts,  wallet addresses and smart contracts.  
-These use cases are currently not offered by the existing ecosystem - this requires 
+"direct payments" from other bank bank accounts,  wallet addresses and smart contracts. These use cases are currently not offered by the existing ecosystem - this requires 
 new thinking about the topic of fiat on- and off-ramping.
 
 ## The Actors
@@ -53,7 +52,7 @@ Check out Dave's case.
 
 ## Bob does a "cash-out" - off-ramp
 
-Charly now has 5 pEUROs. He is able to burn his pEUROs, thus triggering an off-ramp event.
+Charly now has 5 pEURO. He is able to burn his pEURO, thus triggering an off-ramp event.
 He connects his wallet to Alice NFT platform and hits the "burn" button, select 5 pEURO as amount. 
 Following happens:
 
@@ -62,7 +61,7 @@ Following happens:
 - The OCW looks up Bobs bank account number (IBAN) triggers a bank transaction on Alice bank account
 to Bobs IBAN.
 
-The OCW keeps polling the bank account of Alice. As the OCW sees the transaction of 5 EUROs are 
+The OCW keeps polling the bank account of Alice. As the OCW sees the transaction of 5 EURO are 
 listed in the daily statement following happens:
 
 - Bank account balance is now at 145 EURO.
@@ -72,23 +71,23 @@ listed in the daily statement following happens:
 ## Dave is sending Cash to Bob without having a wallet
 
 Dave scrolls through Alice's platform and really likes Bob's work. He wants to donate 
-10 EUROs. Be he can not connect
-a Wallet to transer pEUROs because he does not know how to do it. So instead of signing a
+10 EURO. Be he can not connect
+a Wallet to transer pEURO because he does not know how to do it. So instead of signing a
 transaction, he uses the QR-code of Alice Platform and sends a wire transfer from his
 bank account. Following happens:
 
 - Dave is scanning the QR code for the wire transfer (or enters payment details manually).
 - He confirms the wire transfer in his banking app.
-- Dave sends 10 EUROs from his bank account to Alice bank account.
+- The bank is sending 10 EURO from Daves bank account to Alice bank account.
 
-The OCW keeps polling the bank account of Alice. As the OCW sees the transaction of 10 EUROs are 
+The OCW keeps polling the bank account of Alice. As the OCW sees the transaction of 10 EURO are 
 listed in the daily statement following happens:
 
 - The bank account balance is now at 155 EURO (145 + 10).
-- The OCW sees the new incoming transaction of 10 EUROs from Dave - but the OWC does not know 
+- The OCW sees the new incoming transaction of 10 EURO from Dave - but the OWC does not know 
 Dave, because he never registered on the NFT platform.
 - The OCW does not know Daves IBAN, so it does not to which address it should send
-  the 10 pEUROs. But the QR code for the bank transaction contains a code in reference field 
+  the 10 pEURO. But the QR code for the bank transaction contains a code in reference field 
   of the bank transaction which points to Bobs wallet address. 
 - The OCW mints 10 pEURO into Bobs wallet. 
 - Total amount of pEURO is now 155.
