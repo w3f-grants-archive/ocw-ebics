@@ -37,26 +37,29 @@ use sp_runtime::{
 	},
 	offchain::storage::{MutateStorageError, StorageRetrievalError, StorageValueRef}
 };
-use sp_core::{crypto::{KeyTypeId}};
-use sp_std::prelude::{Vec};
-use sp_runtime::{DispatchError};
-use sp_std::{ convert::{TryFrom}, vec };
+use sp_core::crypto::KeyTypeId;
+use sp_std::prelude::Vec;
+use sp_runtime::DispatchError;
+use sp_std::{ convert::TryFrom, vec };
 
 use lite_json::{
-	json::{JsonValue}, 
+	json::JsonValue,
     NumberValue, Serialize, parse_json,
 };
 
 use crate::types::{
-	Transaction, IbanAccount, unpeg_request,
-	TransactionType, Iban,
+	Transaction, IbanAccount,
+	TransactionType, IbanOf,
 };
+
+use crate::impls::utils::unpeg_request;
 
 #[cfg(feature = "std")]
 use sp_core::{ crypto::Ss58Codec };
 
 pub mod helpers;
 pub mod types;
+mod impls;
 
 #[cfg(test)]
 mod tests;
@@ -81,8 +84,10 @@ const API_URL: &[u8; 33] = b"http://w.e36.io:8093/ebics/api-v1";
 
 /// Account id of
 pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
+
 /// Balance type
 pub type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
+
 /// Based on the above `KeyTypeId` we need to generate a pallet-specific crypto type wrapper.
 /// We can utilize the supported crypto kinds (`sr25519`, `ed25519` and `ecdsa`) and augment
 /// them with the pallet-specific identifier.
@@ -116,6 +121,8 @@ pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
+	use types::StringOf;
+
 	use super::*;
 
 	#[pallet::pallet]
@@ -127,8 +134,10 @@ pub mod pallet {
 	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
 		/// The identifier type for an offchain SendSignedTransaction
 		type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
+
 		/// The overarching dispatch call type.
 		type Call: From<Call<Self>>;
+
 		/// The overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
@@ -137,6 +146,14 @@ pub mod pallet {
 
 		/// Currency type
 		type Currency: Currency<Self::AccountId> + LockableCurrency<Self::AccountId, Moment = Self::BlockNumber>;
+
+		/// Maximum number of characters in IBAN 
+		#[pallet::constant]
+		type MaxIbanLength: Get<u32> + PartialEq + Eq + MaxEncodedLen + TypeInfo;
+
+		/// Maximum number of characters string type in general
+		#[pallet::constant]
+		type MaxStringLength: Get<u32> + PartialEq + Eq + MaxEncodedLen + TypeInfo;
 
 		// This ensures that we only accept unsigned transactions once, every `UnsignedInterval` blocks.
 		#[pallet::constant]
@@ -148,10 +165,6 @@ pub mod pallet {
 		/// multiple pallets send unsigned transactions.
 		#[pallet::constant]
 		type UnsignedPriority: Get<u64>;
-
-		/// Decimals of the internal token
-		#[pallet::constant]
-		type Decimals: Get<u8>;
 	}
 
 	#[pallet::hooks]
@@ -204,11 +217,13 @@ pub mod pallet {
 	pub(super) type BurnRequestCount<T: Config> = StorageValue<_, u64, ValueQuery>;
 
 	#[pallet::type_value]
-	pub(super) fn DefaultApi<T: Config>() -> [u8; 33] { *API_URL }
+	pub(super) fn DefaultApi<T: Config>() -> StringOf<T> { 
+		StringOf::<T>::try_from(API_URL.to_vec()).expect("Might fail if T::MaxStringLength is less than 33")
+	}
+
 	/// URL of the API endpoint
-	/// TO-DO: Length of the URL is fixed to 33 bytes, we need to make it dynamic
 	#[pallet::storage]
-	pub(super) type ApiUrl<T: Config> = StorageValue<Value = [u8; 33], QueryKind = ValueQuery, OnEmpty = DefaultApi<T>>;
+	pub(super) type ApiUrl<T: Config> = StorageValue<_, StringOf<T>, ValueQuery, DefaultApi<T>>;
 
 	/// Mapping between IBAN to AccountId
 	#[pallet::storage]
@@ -216,8 +231,8 @@ pub mod pallet {
 	pub(super) type IbanToAccount<T: Config> = StorageMap<
 		_,
 		Blake2_128Concat,
-		T::AccountId,
-		Iban,
+		AccountIdOf<T>,
+		IbanAccount<T>,
 		ValueQuery,
 	>;
 
@@ -230,7 +245,7 @@ pub mod pallet {
 		_,
 		Blake2_128Concat,
 		u64,
-		BurnRequest<BalanceOf<T>>,
+		BurnRequest<T, BalanceOf<T>>,
 		ValueQuery
 	>;
 
@@ -257,6 +272,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 
+			// TO-DO: need to check if account owner really owns this IBAN
 			IbanToAccount::<T>::insert(&who, &iban);
 
 			Self::deposit_event(Event::IbanAccountMapped(who, iban));
@@ -482,15 +498,7 @@ pub mod pallet {
 			statements: Vec<(IbanAccount, Vec<Transaction>)>
 		) -> DispatchResultWithPostInfo {
 			// this can be called only by the sudo account
-			let _who = ensure_signed(origin)?;
-
-			// // TO-DO: need to make sure the signer is an OCW here
-			// let signers = Signer::<T, T::AuthorityId>::all_accounts();
-
-			// ensure!(
-			// 	signers.contains(who.clone()),
-			// 	"[OCW] Only OCW can call this function",
-			// );
+			ensure_root(origin)?;
 
 			log::info!("[OCW] Processing statements");
 			
@@ -545,51 +553,6 @@ pub mod pallet {
 			} else {
 				InvalidTransaction::Call.into()
 			}
-		}
-	}
-}
-
-
-#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
-#[scale_info(skip_type_params(T))]
-pub struct BurnRequest<Balance: MaxEncodedLen + Default> {
-	pub id: u64,
-	pub burner: Iban,
-	pub dest_iban: Option<Iban>,
-	pub amount: Balance,
-}
-
-impl<Balance: MaxEncodedLen + Default> Default for BurnRequest<Balance> {
-	fn default() -> Self {
-		BurnRequest {
-			id: 0,
-			burner: [0; 21].into(),
-			dest_iban: None,
-			amount: Default::default(),
-		}
-	}
-}
-
-/// Types of activities that can be performed by the OCW
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
-pub enum OcwActivity {
-	ProcessStatements,
-	ProcessBurnRequests,
-	None,
-}
-
-impl Default for OcwActivity {
-	fn default() -> Self {
-		OcwActivity::None
-	}
-}
-
-impl From<u32> for OcwActivity {
-	fn from(activity: u32) -> Self {
-		match activity {
-			0 => OcwActivity::ProcessStatements,
-			1 => OcwActivity::ProcessBurnRequests,
-			_ => OcwActivity::None,
 		}
 	}
 }
@@ -930,11 +893,11 @@ impl<T: Config> Pallet<T> {
 	/// `transactions: Vec<Transaction>` - list of transactions to process
 	#[cfg(feature = "std")]
 	fn process_transactions(
-		iban: &IbanAccount, 
-		transactions: &Vec<Transaction>
+		iban_account: &IbanAccount, 
+		transactions: &Vec<TransactionOf<T>>
 	) {
 		// Get account id of the statement owner
-		let statement_owner = Self::ensure_iban_is_mapped(&iban.iban, None);
+		let statement_owner = Self::ensure_iban_is_mapped(&iban_account.iban, None);
 
 		for transaction in transactions {
 			// decode destination account id from reference
@@ -951,7 +914,7 @@ impl<T: Config> Pallet<T> {
 			// Source (initiator) of the transaction
 			let source: Option<AccountIdOf<T>> = match transaction.tx_type {
 				TransactionType::Incoming => Self::get_account_id(&transaction.iban),
-				TransactionType::Outgoing => Self::get_account_id(&iban.iban),
+				TransactionType::Outgoing => Self::get_account_id(&iban_account.iban),
 				_ => None
 			};
 
@@ -961,7 +924,7 @@ impl<T: Config> Pallet<T> {
 				Err(_e) => {
 					log::error!("[OCW] Failed to decode destination account from reference");
 					match transaction.tx_type {
-						TransactionType::Incoming => Self::get_account_id(&iban.iban),
+						TransactionType::Incoming => Self::get_account_id(&iban_account.iban),
 						TransactionType::Outgoing => Self::get_account_id(&transaction.iban),
 						_ => None
 					}
@@ -1000,7 +963,7 @@ impl<T: Config> Pallet<T> {
 	fn unpeg(
 		request_id: u64,
 		burner: Option<AccountIdOf<T>>,
-		dest_iban: Option<Iban>, 
+		dest_iban: Option<IbanOf<T>>, 
 		amount: BalanceOf<T>
 	) -> Result<(), &'static str> {
 		let remote_url = ApiUrl::<T>::get();
@@ -1162,9 +1125,9 @@ impl<T: Config> Pallet<T> {
 	/// 
 	/// * `statements` - vector of statements
 	/// 	`iban_account: IbanAccount` - IBAN account that owns the statement
-	/// 	`incoming_txs: Vec<Transacion>` - Incoming transactions in the statement
-    ///		`outgoing_txs: Vec<Transaction>` - Outgoing transactions in the statement
-	fn parse_statements() -> Vec<(IbanAccount, Vec<Transaction>)> {
+	/// 	`incoming_txs: Vec<TransactionOf<T>>` - Incoming transactions in the statement
+    ///		`outgoing_txs: Vec<TransactionOf<T>>` - Outgoing transactions in the statement
+	fn parse_statements() -> Vec<(IbanAccount, Vec<TransactionOf<T>>)> {
 		// fetch json value
 		let remote_url = ApiUrl::<T>::get();
 		let json = Self::fetch_json(&remote_url[..]).unwrap();
@@ -1173,7 +1136,7 @@ impl<T: Config> Pallet<T> {
 
 		let statements = match raw_array {
 			Some(v) => {
-				let mut balances: Vec<(IbanAccount, Vec<Transaction>)> = Vec::with_capacity(v.len());
+				let mut balances: Vec<(IbanAccount, Vec<TransactionOf<T>>)> = Vec::with_capacity(v.len());
 				for val in v.iter() {
 					// extract iban account
 					let iban_account = match IbanAccount::from_json_value(&val) {
@@ -1182,8 +1145,8 @@ impl<T: Config> Pallet<T> {
 					};
 
 					// extract transactions
-					let mut transactions = Transaction::parse_transactions(&val, TransactionType::Outgoing).unwrap_or_default();
-					let mut incoming_transactions = Transaction::parse_transactions(&val, TransactionType::Incoming).unwrap_or_default();
+					let mut transactions = TransactionOf<T>::parse_transactions(&val, TransactionType::Outgoing).unwrap_or_default();
+					let mut incoming_transactions = TransactionOf<T>::parse_transactions(&val, TransactionType::Incoming).unwrap_or_default();
 					
 					transactions.append(&mut incoming_transactions);
 					
