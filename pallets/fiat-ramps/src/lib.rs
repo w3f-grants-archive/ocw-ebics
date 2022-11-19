@@ -47,75 +47,20 @@ use lite_json::{
     NumberValue, Serialize, parse_json,
 };
 
-use crate::types::{
-	Transaction, IbanAccount,
-	TransactionType, IbanOf,
-};
-
-use crate::impls::utils::unpeg_request;
-
 #[cfg(feature = "std")]
-use sp_core::{ crypto::Ss58Codec };
+use sp_core::crypto::Ss58Codec;
 
-pub mod helpers;
+mod helpers;
 pub mod types;
 mod impls;
+pub mod crypto;
 
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
 pub mod mock;
 
-/// Defines application identifier for crypto keys of this module.
-///
-/// Every module that deals with signatures needs to declare its unique identifier for
-/// its crypto keys.
-/// When an offchain worker is signing transactions it's going to request keys from type
-/// `KeyTypeId` via the keystore to sign the transaction.
-/// The keys can be inserted manually via RPC (see `author_insertKey`).
-pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"ramp");
-
-/// Pallet ID
-/// Account id will be derived from this pallet id.
-pub const PALLET_ID: PalletId = PalletId(*b"FiatRamp");
-
-/// Hardcoded inital test api endpoint
-const API_URL: &[u8; 33] = b"http://w.e36.io:8093/ebics/api-v1";
-
-/// Account id of
-pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
-
-/// Balance type
-pub type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
-
-/// Based on the above `KeyTypeId` we need to generate a pallet-specific crypto type wrapper.
-/// We can utilize the supported crypto kinds (`sr25519`, `ed25519` and `ecdsa`) and augment
-/// them with the pallet-specific identifier.
-pub mod crypto {
-	use crate::KEY_TYPE;
-	use sp_core::sr25519::Signature as Sr25519Signature;
-	use sp_runtime::app_crypto::{app_crypto, sr25519};
-	use sp_runtime::{traits::Verify, MultiSignature, MultiSigner};
-
-	app_crypto!(sr25519, KEY_TYPE);
-
-	pub struct OcwAuthId;
-
-	impl frame_system::offchain::AppCrypto<MultiSigner, MultiSignature> for OcwAuthId {
-		type RuntimeAppPublic = Public;
-		type GenericSignature = sp_core::sr25519::Signature;
-		type GenericPublic = sp_core::sr25519::Public;
-	}
-
-	// implemented for mock runtime in test
-	impl frame_system::offchain::AppCrypto<<Sr25519Signature as Verify>::Signer, Sr25519Signature>
-		for OcwAuthId
-	{
-		type RuntimeAppPublic = Public;
-		type GenericSignature = sp_core::sr25519::Signature;
-		type GenericPublic = sp_core::sr25519::Public;
-	}
-}
+use crate::types::*;
 
 pub use pallet::*;
 
@@ -136,10 +81,10 @@ pub mod pallet {
 		type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
 
 		/// The overarching dispatch call type.
-		type Call: From<Call<Self>>;
+		type RuntimeCall: From<Call<Self>>;
 
 		/// The overarching event type.
-		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
 		/// Loosely coupled timestamp provider
 		type TimeProvider: UnixTime;
@@ -254,7 +199,7 @@ pub mod pallet {
 		/// Set api url for fetching bank statements
 		// TO-DO change weight for appropriate value
 		#[pallet::weight(0)]
-		pub fn set_api_url(origin: OriginFor<T>, url: [u8; 33]) -> DispatchResultWithPostInfo {
+		pub fn set_api_url(origin: OriginFor<T>, url: StringOf<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 			<ApiUrl<T>>::put(url);
 			Ok(().into())
@@ -268,7 +213,7 @@ pub mod pallet {
 		#[pallet::weight(1000)]
 		pub fn map_iban_account(
 			origin: OriginFor<T>,
-			iban: Iban,
+			iban: IbanOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 
@@ -288,7 +233,7 @@ pub mod pallet {
 		#[pallet::weight(1000)]
 		pub fn unmap_iban_account(
 			origin: OriginFor<T>,
-			iban: Iban,
+			iban: IbanOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 
@@ -364,12 +309,12 @@ pub mod pallet {
 		/// # Arguments
 		/// 
 		/// `amount`: Amount of tokens to burn
-		/// `iban`: Iban account of the receiver
+		/// `iban`: IbanOf<T> account of the receiver
 		#[pallet::weight(1000)]
 		pub fn transfer_to_iban(
 			origin: OriginFor<T>,
 			amount: BalanceOf<T>,
-			iban: Iban,
+			iban: IbanOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 			
@@ -495,7 +440,7 @@ pub mod pallet {
 		#[pallet::weight(10_000)]
 		pub fn process_statements(
 			origin: OriginFor<T>,
-			statements: Vec<(IbanAccount, Vec<Transaction>)>
+			statements: Vec<(IbanAccount<T>, Vec<Transaction<T>>)>
 		) -> DispatchResultWithPostInfo {
 			// this can be called only by the sudo account
 			ensure_root(origin)?;
@@ -521,25 +466,25 @@ pub mod pallet {
 		/// A new account has been created
 		NewAccount(T::AccountId),
 		/// New IBAN has been mapped to an account
-		IbanAccountMapped(T::AccountId, Iban),
+		IbanAccountMapped(T::AccountId, IbanOf<T>),
 		/// IBAN has been un-mapped from an account
-		IbanAccountUnmapped(T::AccountId, Iban),
+		IbanAccountUnmapped(T::AccountId, IbanOf<T>),
 		/// New minted tokens to an account
-		Mint(T::AccountId, Iban, BalanceOf<T>),
+		Mint(T::AccountId, IbanOf<T>, BalanceOf<T>),
 		/// New burned tokens from an account
-		Burn(T::AccountId, Iban, BalanceOf<T>),
+		Burn(T::AccountId, IbanOf<T>, BalanceOf<T>),
 		/// New Burn request has been made
 		BurnRequest {
 			request_id: u64,
 			burner: T::AccountId,
 			dest: Option<T::AccountId>,
-			dest_iban: Option<Iban>,
+			dest_iban: Option<IbanOf<T>>,
 			amount: BalanceOf<T>,
 		},
 		/// Transfer event with IBAN numbers
 		Transfer(
-			Iban, // from
-			Iban, // to
+			IbanOf<T>, // from
+			IbanOf<T>, // to
 			BalanceOf<T>
 		)
 	}
@@ -549,7 +494,7 @@ pub mod pallet {
 		type Call = Call<T>;
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
 			if let Call::process_statements { statements } = call {
-				Self::validate_tx_parameters(statements)
+				Self::validate_tx_parameters(statements) 
 			} else {
 				InvalidTransaction::Call.into()
 			}
@@ -631,7 +576,7 @@ impl<T: Config> Pallet<T> {
 	/// # Arguments
 	/// 
 	/// `iban_account`: IbanAccount to check
-	fn should_process_transactions(iban_account: &IbanAccount) -> bool {
+	fn should_process_transactions(iban_account: &IbanAccount<T>) -> bool {
 		// if iban is not registered in our store, we should process transactions
 		if !Self::iban_exists(&iban_account.iban) {
 			return true;
@@ -654,12 +599,12 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Checks if iban is mapped to an account in the storage
-	fn iban_exists(iban: &Iban) -> bool {
+	fn iban_exists(iban: &IbanOf<T>) -> bool {
 		IbanToAccount::<T>::iter().find(|(_, v)| v == iban).is_some()
 	}
 
-	/// Extract AccountId mapped to Iban
-	fn get_account_id(iban: &Iban) -> Option<T::AccountId> {
+	/// Extract AccountId mapped to IbanOf<T>
+	fn get_account_id(iban: &IbanOf<T>) -> Option<T::AccountId> {
 		IbanToAccount::<T>::iter().find(|(_, v)| v == iban).map(|(k, _)| k)
 	}
 
@@ -668,7 +613,7 @@ impl<T: Config> Pallet<T> {
 	/// If necessary, creates new account
 	#[cfg(feature = "std")]
 	fn ensure_iban_is_mapped(
-		iban: &Iban, 
+		iban: &IbanOf<T>, 
 		account: Option<AccountIdOf<T>>
 	) -> AccountIdOf<T> {
 		// If iban is already mapped to account, return it
@@ -713,10 +658,10 @@ impl<T: Config> Pallet<T> {
 	/// - `reference`: Optional reference field (usually contains burn request id)
 	fn process_transaction(
 		statement_owner: &AccountIdOf<T>,
-		statement_iban: &Iban,
+		statement_iban: &IbanOf<T>,
 		source: Option<T::AccountId>,
 		dest: Option<T::AccountId>,
-		transaction: &Transaction,
+		transaction: &Transaction<T>,
 		reference: Option<u64>,
 	) {
 		let amount: BalanceOf<T> = BalanceOf::<T>::try_from(transaction.amount).unwrap_or_default();
@@ -893,7 +838,7 @@ impl<T: Config> Pallet<T> {
 	/// `transactions: Vec<Transaction>` - list of transactions to process
 	#[cfg(feature = "std")]
 	fn process_transactions(
-		iban_account: &IbanAccount, 
+		iban_account: &IbanAccount<T>, 
 		transactions: &Vec<TransactionOf<T>>
 	) {
 		// Get account id of the statement owner
@@ -941,7 +886,7 @@ impl<T: Config> Pallet<T> {
 
 			Self::process_transaction(
 				&statement_owner,
-				&iban.iban,
+				&iban_account.iban,
 				source, 
 				dest, 
 				transaction, 
@@ -980,10 +925,10 @@ impl<T: Config> Pallet<T> {
 		let reference = format!("{}", request_id);
 
 		// Send request to remote endpoint
-		let body = unpeg_request(
+		let body = impls::utils::unpeg_request(
 			&format!("{:?}", burner.unwrap_or(Self::account_id())),
 			amount_u128,
-			&dest_iban.unwrap_or([0; 21]),
+			&dest_iban,
 			&reference
 		)
 		.serialize();
@@ -1127,7 +1072,7 @@ impl<T: Config> Pallet<T> {
 	/// 	`iban_account: IbanAccount` - IBAN account that owns the statement
 	/// 	`incoming_txs: Vec<TransactionOf<T>>` - Incoming transactions in the statement
     ///		`outgoing_txs: Vec<TransactionOf<T>>` - Outgoing transactions in the statement
-	fn parse_statements() -> Vec<(IbanAccount, Vec<TransactionOf<T>>)> {
+	fn parse_statements() -> Vec<(IbanAccount<T>, Vec<TransactionOf<T>>)> {
 		// fetch json value
 		let remote_url = ApiUrl::<T>::get();
 		let json = Self::fetch_json(&remote_url[..]).unwrap();
@@ -1136,17 +1081,17 @@ impl<T: Config> Pallet<T> {
 
 		let statements = match raw_array {
 			Some(v) => {
-				let mut balances: Vec<(IbanAccount, Vec<TransactionOf<T>>)> = Vec::with_capacity(v.len());
+				let mut balances: Vec<(IbanAccount<T>, Vec<TransactionOf<T>>)> = Vec::with_capacity(v.len());
 				for val in v.iter() {
 					// extract iban account
-					let iban_account = match IbanAccount::from_json_value(&val) {
+					let iban_account = match IbanAccount::<T>::from_json_value(&val) {
 						Some(account) => account,
 						None => Default::default(),
 					};
 
 					// extract transactions
-					let mut transactions = TransactionOf<T>::parse_transactions(&val, TransactionType::Outgoing).unwrap_or_default();
-					let mut incoming_transactions = TransactionOf<T>::parse_transactions(&val, TransactionType::Incoming).unwrap_or_default();
+					let mut transactions = TransactionOf::<T>::parse_transactions(&val, TransactionType::Outgoing).unwrap_or_default();
+					let mut incoming_transactions = TransactionOf::<T>::parse_transactions(&val, TransactionType::Incoming).unwrap_or_default();
 					
 					transactions.append(&mut incoming_transactions);
 					
@@ -1160,7 +1105,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	fn validate_tx_parameters(
-		statements: &Vec<(IbanAccount, Vec<Transaction>)>
+		statements: &Vec<(IbanAccount<T>, Vec<Transaction<T>>)>
 	) -> TransactionValidity {
 		// check if we are on time
 		if !Self::should_sync() {

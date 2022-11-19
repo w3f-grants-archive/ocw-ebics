@@ -1,7 +1,7 @@
 use sp_std::convert::TryInto;
 
-use crate::types::{IbanAccount, Transaction, TransactionType, Iban};
 use sp_std::{vec, vec::Vec};
+use crate::*;
 
 /// Server response types
 #[derive(Clone, Debug, PartialEq)]
@@ -29,16 +29,21 @@ pub enum StatementTypes {
 	InvalidTransactions,
 }
 
+/// Convert string to `BoundedVec<u8, T::StringLimit>`
+fn string_to_bounded_vec<S: Get<u32>>(string: &str) -> BoundedVec<u8, S> {
+	return string.as_bytes().to_vec().try_into().unwrap_or_default();
+}
+
 /// Get mock server response
 /// 
 /// Return a tuple of (response bytes, response parsed to statement)
-pub fn get_mock_response(
+pub fn get_mock_response<T: Config>(
 	response: ResponseTypes,
 	statement: StatementTypes,
-) -> (Vec<u8>, Vec<(IbanAccount, Vec<Transaction>)>) {
-	let alice_iban: Iban = "CH2108307000289537320".as_bytes().try_into().expect("Failed to convert string to bytes");
-	let bob_iban: Iban = "CH1230116000289537312".as_bytes().try_into().expect("Failed to convert string to bytes");
-	let charlie_iban: Iban = "CH1230116000289537313".as_bytes().try_into().expect("Failed to convert string to bytes");
+) -> (Vec<u8>, Vec<(IbanAccount<T>, Vec<Transaction<T>>)>) {
+	let alice_iban: IbanOf<T> = b"CH2108307000289537320".to_vec().try_into().expect("Failed to convert string to bytes");
+	let bob_iban: IbanOf<T> = b"CH1230116000289537312".to_vec().try_into().expect("Failed to convert string to bytes");
+	let charlie_iban: IbanOf<T> = b"CH1230116000289537313".to_vec().try_into().expect("Failed to convert string to bytes");
 
 	match response {
 		ResponseTypes::Empty => {
@@ -59,12 +64,12 @@ pub fn get_mock_response(
 							last_updated: 0,
 						},
 						vec![
-							Transaction{
+							Transaction::<T>{
 								iban: bob_iban.clone(),
-								name: "Bob".as_bytes().to_vec(),
+								name: string_to_bounded_vec::<T::MaxStringLength>("Bob"),
 								amount: 1000000000000,
-								reference: "Purp:5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY; ourRef:none".as_bytes().to_vec(),
-								currency: "EUR".as_bytes().to_vec(),
+								reference: string_to_bounded_vec("Purp:5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY; ourRef:none"),
+								currency: string_to_bounded_vec::<T::MaxStringLength>("EUR"),
 								tx_type: TransactionType::Incoming,
 							}
 						]
@@ -98,10 +103,10 @@ pub fn get_mock_response(
 							vec![
 								Transaction{
 									iban: alice_iban.clone(),
-									name: "Alice".as_bytes().to_vec(),
+									name: string_to_bounded_vec::<T::MaxStringLength>("Alice"),
 									amount: 100000000000000,
-									reference: "Purp:5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty; ourRef:none".as_bytes().to_vec(),
-									currency: "EUR".as_bytes().to_vec(),
+									reference: string_to_bounded_vec::<T::MaxStringLength>("Purp:5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty; ourRef:none"),
+									currency: string_to_bounded_vec::<T::MaxStringLength>("EUR"),
 									tx_type: TransactionType::Outgoing,
 								}
 							]
@@ -144,18 +149,18 @@ pub fn get_mock_response(
 							vec![
 								Transaction{
 									iban: alice_iban.clone(),
-									name: "Alice".as_bytes().to_vec(),
+									name: string_to_bounded_vec::<T::MaxStringLength>("Alice"),
 									amount: 150000000000000,
-									reference: "Purp:5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y; ourRef: none".as_bytes().to_vec(),
-									currency: "EUR".as_bytes().to_vec(),
+									reference: string_to_bounded_vec::<T::MaxStringLength>("Purp:5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y; ourRef: none"),
+									currency: string_to_bounded_vec::<T::MaxStringLength>("EUR"),
 									tx_type: TransactionType::Incoming,
 								},
 								Transaction{
 									iban: bob_iban.clone(),
-									name: "Bob".as_bytes().to_vec(),
+									name: string_to_bounded_vec::<T::MaxStringLength>("Bob"),
 									amount: 150000000000000,
-									reference: "Purp:5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty; ourRef: none".as_bytes().to_vec(),
-									currency: "EUR".as_bytes().to_vec(),
+									reference: string_to_bounded_vec::<T::MaxStringLength>("Purp:5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty; ourRef: none"),
+									currency: string_to_bounded_vec::<T::MaxStringLength>("EUR"),
 									tx_type: TransactionType::Outgoing,
 								}
 							]
@@ -188,11 +193,11 @@ pub fn get_mock_response(
 							},
 							vec![
 								Transaction{
-									iban: [0; 21],
-									name: "Alice".as_bytes().to_vec(),
+									iban: string_to_bounded_vec::<T::MaxIbanLength>("0000000000000000000000000000"),
+									name: string_to_bounded_vec::<T::MaxStringLength>("Alice"),
 									amount: 150000000000000,
-									reference: "Purp:None; ourRef: none".as_bytes().to_vec(),
-									currency: "EUR".as_bytes().to_vec(),
+									reference: string_to_bounded_vec::<T::MaxStringLength>("Purp:None; ourRef: none"),
+									currency: string_to_bounded_vec::<T::MaxStringLength>("EUR"),
 									tx_type: TransactionType::Incoming,
 								}
 							]
@@ -289,18 +294,18 @@ pub fn get_mock_response(
                     vec![
                         Transaction {
                             iban: bob_iban.clone(),
-                            name: "Bob".as_bytes().to_vec(),
+                            name: string_to_bounded_vec::<T::MaxStringLength>("Bob"),
                             amount: 150000000000000,
-                            reference: "Purp:5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty; ourRef:none".as_bytes().to_vec(),
-                            currency: "EUR".as_bytes().to_vec(),
+                            reference: string_to_bounded_vec::<T::MaxStringLength>("Purp:5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty; ourRef:none"),
+                            currency: string_to_bounded_vec::<T::MaxStringLength>("EUR"),
                             tx_type: TransactionType::Outgoing,
                         },
 						Transaction {
                             iban: alice_iban.clone(),
-                            name: "Alice".as_bytes().to_vec(),
+                            name: string_to_bounded_vec::<T::MaxStringLength>("Alice"),
                             amount: 150000000000000,
-                            reference: "Purp:5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y; ourRef:none".as_bytes().to_vec(),
-                            currency: "EUR".as_bytes().to_vec(),
+                            reference: string_to_bounded_vec::<T::MaxStringLength>("Purp:5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y; ourRef:none"),
+                            currency: string_to_bounded_vec::<T::MaxStringLength>("EUR"),
                             tx_type: TransactionType::Incoming,
                         },
                     ]
@@ -314,18 +319,18 @@ pub fn get_mock_response(
                     vec![
                         Transaction {
                             iban: charlie_iban.clone(),
-                            name: "Charlie".as_bytes().to_vec(),
+                            name: string_to_bounded_vec::<T::MaxStringLength>("Charlie"),
                             amount: 150000000000000,
-                            reference: "Purp:5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y; ourRef:none".as_bytes().to_vec(),
-                            currency: "EUR".as_bytes().to_vec(),
+                            reference: string_to_bounded_vec::<T::MaxStringLength>("Purp:5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y; ourRef:none"),
+                            currency: string_to_bounded_vec::<T::MaxStringLength>("EUR"),
                             tx_type: TransactionType::Outgoing,
                         },
 						Transaction {
                             iban: alice_iban.clone(),
-                            name: "Alice".as_bytes().to_vec(),
+                            name: string_to_bounded_vec::<T::MaxStringLength>("Alice"),
                             amount: 150000000000000,
-                            reference: "Purp:5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty; ourRef:none".as_bytes().to_vec(),
-                            currency: "EUR".as_bytes().to_vec(),
+                            reference: string_to_bounded_vec::<T::MaxStringLength>("Purp:5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty; ourRef:none"),
+                            currency: string_to_bounded_vec::<T::MaxStringLength>("EUR"),
                             tx_type: TransactionType::Incoming,
                         },
                     ]
@@ -339,26 +344,26 @@ pub fn get_mock_response(
                     vec![
 						Transaction {
                             iban: bob_iban.clone(),
-                            name: "Bob".as_bytes().to_vec(),
+                            name: string_to_bounded_vec::<T::MaxStringLength>("Bob"),
                             amount: 150000000000000,
-                            reference: "Purp:5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty; ourRef:none".as_bytes().to_vec(),
-                            currency: "EUR".as_bytes().to_vec(),
+                            reference: string_to_bounded_vec::<T::MaxStringLength>("Purp:5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty; ourRef:none"),
+                            currency: string_to_bounded_vec::<T::MaxStringLength>("EUR"),
                             tx_type: TransactionType::Outgoing,
                         },
 						Transaction {
                             iban: bob_iban.clone(),
-                            name: "Bob".as_bytes().to_vec(),
+                            name: string_to_bounded_vec::<T::MaxStringLength>("Bob"),
                             amount: 50000000000000,
-                            reference: "Purp:5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY; ourRef:none".as_bytes().to_vec(),
-                            currency: "EUR".as_bytes().to_vec(),
+                            reference: string_to_bounded_vec::<T::MaxStringLength>("Purp:5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY; ourRef:none"),
+                            currency: string_to_bounded_vec::<T::MaxStringLength>("EUR"),
                             tx_type: TransactionType::Incoming,
                         },
 						Transaction {
                             iban: bob_iban.clone(),
-                            name: "Bob".as_bytes().to_vec(),
+                            name: string_to_bounded_vec::<T::MaxStringLength>("Bob"),
                             amount: 100000000000000,
-                            reference: "Purp:5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY; ourRef:none".as_bytes().to_vec(),
-                            currency: "EUR".as_bytes().to_vec(),
+                            reference: string_to_bounded_vec::<T::MaxStringLength>("Purp:5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY; ourRef:none"),
+                            currency: string_to_bounded_vec::<T::MaxStringLength>("EUR"),
                             tx_type: TransactionType::Incoming,
                         },
                     ]

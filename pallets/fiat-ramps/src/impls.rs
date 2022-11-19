@@ -1,5 +1,10 @@
 //! Implementations of traits and types for the pallet
+use core::convert::TryInto;
+
 use crate::*;
+use crate::types::*;
+
+use self::utils::{extract_value, parse_object};
 
 impl<T: SigningTypes> SignedPayload<T> for Payload<T::Public> {
 	fn public(&self) -> T::Public {
@@ -23,11 +28,11 @@ impl From<u32> for OcwActivity {
 	}
 }
 
-impl<Balance: MaxEncodedLen + Default> Default for BurnRequest<Balance> {
+impl<T: Config, Balance: MaxEncodedLen + Default> Default for BurnRequest<T, Balance> {
 	fn default() -> Self {
 		BurnRequest {
 			id: 0,
-			burner: [0; 21].into(),
+			burner: IbanOf::<T>::default(),
 			dest_iban: None,
 			amount: Default::default(),
 		}
@@ -49,17 +54,6 @@ impl Deserialize<Vec<u8>> for Vec<u8> {
     }
 }
 
-impl<T: Config> Deserialize<IbanOf<T>> for Iban<T> {
-	fn deserialize(json: &JsonValue) -> Option<IbanOf<T>> {
-		let iban = json.clone()
-			.to_string()
-			.map(|v| v.iter().map(|c| *c as u8).collect::<Vec<_>>())
-			.unwrap();
-		
-		Some(iban.try_into().unwrap_or_else(|_| panic!("Invalid IBAN")))
-	}
-}
-
 impl Deserialize<u128> for u128 {
     fn deserialize(json: &JsonValue) -> Option<u128> {
         json.clone()
@@ -74,10 +68,10 @@ impl Deserialize<u128> for u128 {
     }
 }
 
-/// Functions of `Transaction` type
+/// Functions of `Transaction<T>` type
 impl<T: Config> Transaction<T> {
     pub fn new(
-        iban: Iban,
+        iban: IbanOf<T>,
         name: StringOf<T>,
         currency: StringOf<T>,
         amount: u128,
@@ -99,11 +93,12 @@ impl<T: Config> Transaction<T> {
 		let raw_object = json.as_object();
         let transaction = match raw_object {
             Some(obj) => {
-                let iban = extract_value::<Iban>("iban", obj);
-                let name = extract_value::<StringOf<T>>("name", obj);
-                let currency = extract_value::<StringOf<T>>("currency", obj);
+                let iban: IbanOf<T> = extract_value::<Vec<u8>>("iban", obj).try_into().expect("Invalid IBAN");
+                let name: StringOf<T> = extract_value::<Vec<u8>>("name", obj).try_into().expect("Invalid name");
+                let currency: StringOf<T> = extract_value::<Vec<u8>>("currency", obj).try_into().expect("Invalid currency");
                 let amount = extract_value::<u128>("amount", obj);
-                let reference = extract_value::<StringOf<T>>("reference", obj);
+                let reference: StringOf<T> = extract_value::<Vec<u8>>("reference", obj).try_into().expect("Invalid reference");
+
                 Self::new(
                     iban,
                     name,
@@ -127,7 +122,7 @@ impl<T: Config> Transaction<T> {
 					TransactionType::Incoming => {
 						let incoming_transactions = match parse_object("incomingTransactions", obj) {
 							JsonValue::Array(txs) => {
-								txs.iter().map(|json| Self::from_json_statement(json, &transaction_type).unwrap_or(Default::default())).collect::<Vec<Transaction>>()
+								txs.iter().map(|json| Self::from_json_statement(json, &transaction_type).unwrap_or(Default::default())).collect::<Vec<Transaction<T>>>()
 							}
 							_ => return None,
 						};
@@ -136,7 +131,7 @@ impl<T: Config> Transaction<T> {
 					TransactionType::Outgoing => {
 						let outgoing_transactions = match parse_object("outgoingTransactions", obj) {
 							JsonValue::Array(txs) => {
-								txs.iter().map(|json| Self::from_json_statement(json, &transaction_type).unwrap_or(Default::default())).collect::<Vec<Transaction>>()
+								txs.iter().map(|json| Self::from_json_statement(json, &transaction_type).unwrap_or(Default::default())).collect::<Vec<Transaction<T>>>()
 							}
 							_ => return None,
 						};
@@ -187,6 +182,10 @@ impl<T: Config> IbanAccount<T> {
 
 /// Utility functions
 pub mod utils {
+    use lite_json::{JsonValue, NumberValue};
+    use crate::Config;
+    use crate::types::{Deserialize, IbanOf};
+
     /// Utility function for parsing value from json object
     pub fn parse_object(key: &str, obj: &[(Vec<char>, lite_json::JsonValue)]) -> JsonValue {
         let raw_object = obj.into_iter().find(|(k, _)| k.iter().copied().eq(key.chars()));
@@ -240,7 +239,7 @@ pub mod utils {
         };
 
         let amount_json = JsonValue::Number(NumberValue {
-            integer: integer as i64,
+            integer: integer as u64,
             fraction: fraction as u64,
             fraction_length,
             exponent: 0,
