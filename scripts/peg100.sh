@@ -17,7 +17,7 @@ curl -X 'POST' \
   "receipientBankName": "Hypi Lenzburg AG",
   "receipientCity": "Baar",
   "receipientCountry": "CH",
-  "receipientIban": "CH1230116000289537313",
+  "receipientIban": "CH2108307000289537313",
 
   "receipientName": "element36 AG",
   "receipientStreet": "Bahnmatt",

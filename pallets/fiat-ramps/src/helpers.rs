@@ -38,7 +38,7 @@ pub fn get_mock_response(
 ) -> (Vec<u8>, Vec<(IbanAccount, Vec<Transaction>)>) {
 	let alice_iban: Iban = "CH2108307000289537320".as_bytes().try_into().expect("Failed to convert string to bytes");
 	let bob_iban: Iban = "CH1230116000289537312".as_bytes().try_into().expect("Failed to convert string to bytes");
-	let charlie_iban: Iban = "CH1230116000289537313".as_bytes().try_into().expect("Failed to convert string to bytes");
+	let charlie_iban: Iban = "CH2108307000289537313".as_bytes().try_into().expect("Failed to convert string to bytes");
 
 	match response {
 		ResponseTypes::Empty => {
@@ -112,7 +112,7 @@ pub fn get_mock_response(
 				StatementTypes::CompleteTransactions => {
 					let bytes = br#"[
 						{
-							"iban": "CH1230116000289537313",
+							"iban": "CH2108307000289537313",
 							"balanceCL": 10000000,
 							"incomingTransactions": [
 								{
@@ -166,7 +166,7 @@ pub fn get_mock_response(
 				StatementTypes::InvalidTransactions => {
 					let bytes = br#"[
 						{
-							"iban": "CH1230116000289537313",
+							"iban": "CH2108307000289537313",
 							"balanceCL": 10000000,
 							"incomingTransactions": [
 								{
@@ -205,7 +205,7 @@ pub fn get_mock_response(
 		ResponseTypes::MultipleStatements => {
 			let bytes = br#"[
 				{
-					"iban": "CH1230116000289537313",
+					"iban": "CH2108307000289537313",
 					"balanceCL": 10000000,
 					"incomingTransactions": [
 						{
@@ -240,7 +240,7 @@ pub fn get_mock_response(
 					],
 					"outgoingTransactions": [
 						{
-							"iban": "CH1230116000289537313",
+							"iban": "CH2108307000289537313",
 							"name": "Charlie",
 							"currency": "EUR",
 							"amount": 15000,

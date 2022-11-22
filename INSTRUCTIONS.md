@@ -66,7 +66,7 @@ Once you have submitted the call, head over to `Extrinsics -> fiatRamps -> mapIb
     "accountId": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
   }, {
     "ownerName" : "Charlie",
-    "iban" : "CH1230116000289537313",
+    "iban" : "CH2108307000289537313",
     "accountId": "5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y",
   } ]
 }
