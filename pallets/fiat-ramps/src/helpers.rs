@@ -16,7 +16,7 @@ pub enum ResponseTypes {
 
 /// Bank statement types
 #[derive(Clone, Debug, PartialEq)]
-pub enum StatementTypes {
+pub(crate) enum StatementTypes {
 	/// Bank statement contains no transactions (usual case)
 	Empty,
 	/// Bank statement has `incomingTransactions` field populated
@@ -30,17 +30,17 @@ pub enum StatementTypes {
 }
 
 /// Convert string to `BoundedVec<u8, T::StringLimit>`
-fn string_to_bounded_vec<S: Get<u32>>(string: &str) -> BoundedVec<u8, S> {
+pub(crate) fn string_to_bounded_vec<S: Get<u32>>(string: &str) -> BoundedVec<u8, S> {
 	return string.as_bytes().to_vec().try_into().unwrap_or_default();
 }
 
 /// Get mock server response
 /// 
 /// Return a tuple of (response bytes, response parsed to statement)
-pub fn get_mock_response<T: Config>(
+pub(crate) fn get_mock_response<T: Config>(
 	response: ResponseTypes,
 	statement: StatementTypes,
-) -> (Vec<u8>, Vec<(IbanAccount<T>, Vec<Transaction<T>>)>) {
+) -> (Vec<u8>, Vec<(BankAccountOf<T>, Vec<TransactionOf<T>>)>) {
 	let alice_iban: IbanOf<T> = b"CH2108307000289537320".to_vec().try_into().expect("Failed to convert string to bytes");
 	let bob_iban: IbanOf<T> = b"CH1230116000289537312".to_vec().try_into().expect("Failed to convert string to bytes");
 	let charlie_iban: IbanOf<T> = b"CH1230116000289537313".to_vec().try_into().expect("Failed to convert string to bytes");
@@ -58,10 +58,11 @@ pub fn get_mock_response<T: Config>(
 					// the transaction is coming from Bob to Alice
 					let bytes = br#"[{"iban":"CH2108307000289537320","balanceCL":449.00,"incomingTransactions":[{"iban":"CH1230116000289537312","name":"Bob","currency":"EUR","amount":100.00,"reference":"Purp:5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY; ourRef:none"}],"outgoingTransactions":[]}]"#.to_vec();
 					let parsed_statements = vec![(
-						IbanAccount {
+						BankAccount {
 							iban: alice_iban.clone(),
 							balance: 4490000000000,
 							last_updated: 0,
+							behaviour: AccountBehaviour::Keep,
 						},
 						vec![
 							Transaction::<T>{
@@ -95,10 +96,11 @@ pub fn get_mock_response<T: Config>(
 					]"#.to_vec();
 					let parsed_statements = vec![
 						(
-							IbanAccount {
+							BankAccount {
 								iban: bob_iban.clone(),
 								balance: 100000000000000000,
 								last_updated: 0,
+								behaviour: AccountBehaviour::Keep,
 							},
 							vec![
 								Transaction{
@@ -141,10 +143,11 @@ pub fn get_mock_response<T: Config>(
 					]"#.to_vec();
 					let parsed_statements = vec![
 						(
-							IbanAccount {
+							BankAccount {
 								iban: charlie_iban.clone(),
 								balance: 100000000000000000,
 								last_updated: 0,
+								behaviour: AccountBehaviour::Keep,
 							},
 							vec![
 								Transaction{
@@ -186,10 +189,11 @@ pub fn get_mock_response<T: Config>(
 					]"#.to_vec();
 					let parsed_statements = vec![
 						(
-							IbanAccount {
+							BankAccount {
 								iban: charlie_iban.clone(),
 								balance: 100000000000000000,
 								last_updated: 0,
+								behaviour: AccountBehaviour::Keep,
 							},
 							vec![
 								Transaction{
@@ -286,10 +290,11 @@ pub fn get_mock_response<T: Config>(
 
             let parsed_statements = vec![
                 (
-                    IbanAccount {
+                    BankAccount {
                         iban: charlie_iban.clone(),
                         balance: 100000000000000000,
                         last_updated: 0,
+						behaviour: AccountBehaviour::Keep
                     },
                     vec![
                         Transaction {
@@ -311,10 +316,11 @@ pub fn get_mock_response<T: Config>(
                     ]
                 ),
                 (
-                    IbanAccount {
+                    BankAccount {
                         iban: bob_iban.clone(),
                         balance: 100000000000000000,
                         last_updated: 0,
+						behaviour: AccountBehaviour::Keep
                     },
                     vec![
                         Transaction {
@@ -336,10 +342,11 @@ pub fn get_mock_response<T: Config>(
                     ]
                 ),
                 (
-                    IbanAccount {
+                    BankAccount {
                         iban: alice_iban.clone(),
                         balance: 100000000000000000,
                         last_updated: 0,
+						behaviour: AccountBehaviour::Keep
                     },
                     vec![
 						Transaction {

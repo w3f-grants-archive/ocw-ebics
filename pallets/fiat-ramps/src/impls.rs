@@ -3,6 +3,7 @@ use core::convert::TryInto;
 
 use crate::*;
 use crate::types::*;
+use sp_std::default::Default;
 
 use self::utils::{extract_value, parse_object};
 
@@ -24,17 +25,6 @@ impl From<u32> for OcwActivity {
 			0 => OcwActivity::ProcessStatements,
 			1 => OcwActivity::ProcessBurnRequests,
 			_ => OcwActivity::None,
-		}
-	}
-}
-
-impl<T: Config, Balance: MaxEncodedLen + Default> Default for BurnRequest<T, Balance> {
-	fn default() -> Self {
-		BurnRequest {
-			id: 0,
-			burner: IbanOf::<T>::default(),
-			dest_iban: None,
-			amount: Default::default(),
 		}
 	}
 }
@@ -69,13 +59,13 @@ impl Deserialize<u128> for u128 {
 }
 
 /// Functions of `Transaction<T>` type
-impl<T: Config> Transaction<T> {
+impl<MaxIbanLength: Get<u32>, MaxStringLength: Get<u32>> Transaction<MaxIbanLength, MaxStringLength> {
     pub fn new(
-        iban: IbanOf<T>,
-        name: StringOf<T>,
-        currency: StringOf<T>,
+        iban: Iban<MaxIbanLength>,
+        name: BoundedVec<u8, MaxStringLength>,
+        currency: BoundedVec<u8, MaxStringLength>,
         amount: u128,
-        reference: StringOf<T>,
+        reference: BoundedVec<u8, MaxStringLength>,
         tx_type: TransactionType
     ) -> Self {
         Self {
@@ -91,27 +81,26 @@ impl<T: Config> Transaction<T> {
 	// Get single transaction instance from json
 	pub fn from_json_statement(json: &JsonValue, tx_type: &TransactionType) -> Option<Self> {
 		let raw_object = json.as_object();
-        let transaction = match raw_object {
+        
+        match raw_object {
             Some(obj) => {
-                let iban: IbanOf<T> = extract_value::<Vec<u8>>("iban", obj).try_into().expect("Invalid IBAN");
-                let name: StringOf<T> = extract_value::<Vec<u8>>("name", obj).try_into().expect("Invalid name");
-                let currency: StringOf<T> = extract_value::<Vec<u8>>("currency", obj).try_into().expect("Invalid currency");
+                let iban = extract_value::<Vec<u8>>("iban", obj).try_into().expect("Invalid IBAN");
+                let name = extract_value::<Vec<u8>>("name", obj).try_into().expect("Invalid name");
+                let currency = extract_value::<Vec<u8>>("currency", obj).try_into().expect("Invalid currency");
                 let amount = extract_value::<u128>("amount", obj);
-                let reference: StringOf<T> = extract_value::<Vec<u8>>("reference", obj).try_into().expect("Invalid reference");
+                let reference = extract_value::<Vec<u8>>("reference", obj).try_into().expect("Invalid reference");
 
-                Self::new(
+                Some(Self::new(
                     iban,
                     name,
                     currency,
                     amount,
                     reference,
                     *tx_type
-                )
+                ))
             },
-            None => return None,
-        };
-        
-		Some(transaction)
+            _ => None,
+        }
 	}
 	
 	/// Parse multiple transactions from JsonValue
@@ -122,7 +111,7 @@ impl<T: Config> Transaction<T> {
 					TransactionType::Incoming => {
 						let incoming_transactions = match parse_object("incomingTransactions", obj) {
 							JsonValue::Array(txs) => {
-								txs.iter().map(|json| Self::from_json_statement(json, &transaction_type).unwrap_or(Default::default())).collect::<Vec<Transaction<T>>>()
+								txs.iter().map(|json| Self::from_json_statement(json, &transaction_type).unwrap_or_default()).collect::<Vec<Transaction<MaxIbanLength, MaxStringLength>>>()
 							}
 							_ => return None,
 						};
@@ -131,7 +120,7 @@ impl<T: Config> Transaction<T> {
 					TransactionType::Outgoing => {
 						let outgoing_transactions = match parse_object("outgoingTransactions", obj) {
 							JsonValue::Array(txs) => {
-								txs.iter().map(|json| Self::from_json_statement(json, &transaction_type).unwrap_or(Default::default())).collect::<Vec<Transaction<T>>>()
+								txs.iter().map(|json| Self::from_json_statement(json, &transaction_type).unwrap_or(Default::default())).collect::<Vec<Transaction<MaxIbanLength, MaxStringLength>>>()
 							}
 							_ => return None,
 						};
@@ -147,17 +136,19 @@ impl<T: Config> Transaction<T> {
 	}
 }
 
-/// Functions of `IbanAccount` type
-impl<T: Config> IbanAccount<T> {
+/// Functions of `BankAccount` type
+impl<MaxLength: Get<u32>> BankAccount<MaxLength> {
     pub fn new (
-        iban: IbanOf<T>,
+        iban: Iban<MaxLength>,
         balance: u128,
-        last_updated: u64
+        last_updated: u64,
+        behaviour: AccountBehaviour<MaxLength>,
     ) -> Self {
         Self {
             iban,
             balance,
-            last_updated
+            last_updated,
+            behaviour,
         }
     }
 	
@@ -165,13 +156,14 @@ impl<T: Config> IbanAccount<T> {
         let raw_object = json.as_object();
 		let iban_account = match raw_object {
 			Some(obj) => {
-				let iban = extract_value::<IbanOf<T>>("iban", obj);
+				let iban = extract_value::<Vec<u8>>("iban", obj).try_into().unwrap_or_default();
 				let balance = extract_value::<u128>("balanceCL", obj);
 
 				Self::new(
 					iban,
 					balance,
-					0
+					0,
+                    AccountBehaviour::default()
                 )
 			},
 			_ => return None,
@@ -243,6 +235,7 @@ pub mod utils {
             fraction: fraction as u64,
             fraction_length,
             exponent: 0,
+            negative: false,
         });
 
         let iban_json = JsonValue::String(

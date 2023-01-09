@@ -11,7 +11,7 @@ use frame_support::{
 		Get, UnixTime, Currency, LockableCurrency,
 		ExistenceRequirement, WithdrawReasons, Imbalance
 	},
-	ensure, PalletId,
+	ensure,
 	dispatch::DispatchResultWithPostInfo
 };
 
@@ -20,7 +20,7 @@ use frame_system::{
 	offchain::{
 		SignedPayload, 
 		SendSignedTransaction, 
-		SigningTypes, 
+		SigningTypes,
 		Signer,
 		CreateSignedTransaction,
 		AppCrypto
@@ -32,19 +32,14 @@ use sp_runtime::{
 	transaction_validity::{
 		InvalidTransaction, TransactionValidity,
 	},
-	traits::{
-		AccountIdConversion
-	},
 	offchain::storage::{MutateStorageError, StorageRetrievalError, StorageValueRef}
 };
-use sp_core::crypto::KeyTypeId;
-use sp_std::prelude::Vec;
+use sp_std::{fmt::Debug, prelude::Vec};
 use sp_runtime::DispatchError;
-use sp_std::{ convert::TryFrom, vec };
-
+use sp_std::{ convert::TryFrom, vec, default::Default };
 use lite_json::{
 	json::JsonValue,
-    NumberValue, Serialize, parse_json,
+    Serialize, parse_json,
 };
 
 #[cfg(feature = "std")]
@@ -66,8 +61,7 @@ pub use pallet::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use types::StringOf;
-
+	use types::{AccountBehaviour, StringOf};
 	use super::*;
 
 	#[pallet::pallet]
@@ -94,11 +88,11 @@ pub mod pallet {
 
 		/// Maximum number of characters in IBAN 
 		#[pallet::constant]
-		type MaxIbanLength: Get<u32> + PartialEq + Eq + MaxEncodedLen + TypeInfo;
+		type MaxIbanLength: Get<u32> + PartialEq + Eq + MaxEncodedLen + TypeInfo + Debug + Clone;
 
 		/// Maximum number of characters string type in general
 		#[pallet::constant]
-		type MaxStringLength: Get<u32> + PartialEq + Eq + MaxEncodedLen + TypeInfo;
+		type MaxStringLength: Get<u32> + PartialEq + Eq + MaxEncodedLen + TypeInfo + Debug + Clone;
 
 		// This ensures that we only accept unsigned transactions once, every `UnsignedInterval` blocks.
 		#[pallet::constant]
@@ -170,28 +164,26 @@ pub mod pallet {
 	#[pallet::storage]
 	pub(super) type ApiUrl<T: Config> = StorageValue<_, StringOf<T>, ValueQuery, DefaultApi<T>>;
 
-	/// Mapping between IBAN to AccountId
+	/// Mapping from `AccountId` to `BankAccount`
 	#[pallet::storage]
-	#[pallet::getter(fn iban_to_account)]
-	pub(super) type IbanToAccount<T: Config> = StorageMap<
+	#[pallet::getter(fn account_of)]
+	pub(super) type Accounts<T: Config> = StorageMap<
 		_,
 		Blake2_128Concat,
 		AccountIdOf<T>,
-		IbanAccount<T>,
-		ValueQuery,
+		BankAccountOf<T>,
 	>;
 
 	/// Stores burn requests
 	/// until they are confirmed by the bank as outgoing transaction
 	/// transaction_id -> burn_request
 	#[pallet::storage]
-	#[pallet::getter(fn burn_request)]
+	#[pallet::getter(fn burn_requests)]
 	pub(super) type BurnRequests<T: Config> = StorageMap<
 		_,
 		Blake2_128Concat,
 		u64,
-		BurnRequest<T, BalanceOf<T>>,
-		ValueQuery
+		BurnRequest<T::MaxIbanLength, BalanceOf<T>>,
 	>;
 
 	#[pallet::call]
@@ -205,22 +197,30 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		/// Add new `IbanAccount` to the store
+		/// Create new bank account instance
 		/// 
 		/// # Arguments
 		/// 
-		/// `iban`: IbanAccount struct
+		/// * `origin` - The origin of the call
+		/// * `iban` - IBAN of the account
+		/// * `behaviour` - Behaviour of the account, i.e. whether it is a deposit or withdrawal account
 		#[pallet::weight(1000)]
-		pub fn map_iban_account(
+		pub fn create_account(
 			origin: OriginFor<T>,
 			iban: IbanOf<T>,
+			behaviour: AccountBehaviour<T::MaxIbanLength>,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 
 			// TO-DO: need to check if account owner really owns this IBAN
-			IbanToAccount::<T>::insert(&who, &iban);
+			Accounts::<T>::insert(&who, BankAccount::<T::MaxIbanLength> {
+				iban,
+				behaviour,
+				balance: 0u128,
+				last_updated: T::TimeProvider::now().as_millis() as u64,
+			});
 
-			Self::deposit_event(Event::IbanAccountMapped(who, iban));
+			Self::deposit_event(Event::AccountCreated(who, iban));
 
 			Ok(().into())
 		}
@@ -237,9 +237,9 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 
-			IbanToAccount::<T>::remove(&who);
+			Accounts::<T>::remove(&who);
 
-			Self::deposit_event(Event::IbanAccountUnmapped(who, iban));
+			Self::deposit_event(Event::AccountDestroyed(who, iban));
 
 			Ok(().into())
 		}
@@ -263,26 +263,26 @@ pub mod pallet {
 
 			ensure!(
 				balance >= amount,
-				"Not enough balance to burn",
+				Error::<T>::InsufficientBalance,
 			);
 
 			ensure!(
 				amount.saturated_into::<u128>() > 0,
-				"Amount to burn is too low",
+				Error::<T>::AmountIsZero,
 			);
 
 			// transfer amount to this pallet's account
 			T::Currency::transfer(&who, &Self::account_id(), amount, ExistenceRequirement::AllowDeath)
 				.map_err(|_| DispatchError::Other("Can't burn funds"))?;
 			
-			let dest_iban = Self::iban_to_account(&who);
+			let dest_account = Self::account_of(&who).ok_or(Error::<T>::AccountNotFound)?;
 
 			let request_id = Self::burn_request_count();
 
 			let burn_request = BurnRequest {
 				id: request_id,
-				burner: dest_iban.clone(),
-				dest_iban: Some(dest_iban.clone()),
+				burner: dest_account.iban.clone(),
+				dest_iban: Some(dest_account.iban.clone()),
 				amount,
 			};
 
@@ -297,7 +297,7 @@ pub mod pallet {
 				request_id,
 				burner: who.clone(),
 				dest: Some(who),
-				dest_iban: Some(dest_iban),
+				dest_iban: Some(dest_account.iban),
 				amount,
 			});
 
@@ -311,10 +311,10 @@ pub mod pallet {
 		/// `amount`: Amount of tokens to burn
 		/// `iban`: IbanOf<T> account of the receiver
 		#[pallet::weight(1000)]
-		pub fn transfer_to_iban(
+		pub fn transfer(
 			origin: OriginFor<T>,
 			amount: BalanceOf<T>,
-			iban: IbanOf<T>,
+			dest: TransferDestinationOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 			
@@ -322,12 +322,12 @@ pub mod pallet {
 
 			ensure!(
 				balance >= amount,
-				"Not enough balance to burn",
+				Error::<T>::InsufficientBalance,
 			);
 
 			ensure!(
 				amount.saturated_into::<u128>() > 0,
-				"Amount to burn is too low",
+				Error::<T>::AmountIsZero,
 			);
 
 			// transfer amount to this pallet's account
@@ -337,10 +337,20 @@ pub mod pallet {
 			// Request id (nonce)
 			let request_id = Self::burn_request_count();
 
+			// Get bank account associated with the sender
+			let source_account = Accounts::<T>::get(&who).ok_or(Error::<T>::AccountNotFound)?;
+
+			let dest_iban = match dest {
+				TransferDestinationOf::Iban(iban) => Ok(iban),
+				TransferDestinationOf::Account(dest_account) => {
+					Accounts::<T>::get(&dest_account).ok_or(Error::<T>::AccountNotFound).map(|account| account.iban)
+				}
+			}?;
+
 			let burn_request = BurnRequest {
 				id: request_id,
-				burner: IbanToAccount::<T>::get(&who),
-				dest_iban: Some(iban.clone()),
+				burner: source_account.iban.clone(),
+				dest_iban: Some(dest_iban.clone()),
 				amount,
 			};
 
@@ -358,7 +368,7 @@ pub mod pallet {
 				request_id,
 				burner: who,
 				dest: dest_account,
-				dest_iban: Some(iban),
+				dest_iban: Some(dest_iban),
 				amount,
 			});
 
@@ -404,8 +414,8 @@ pub mod pallet {
 
 			let burn_request = BurnRequest {
 				id: request_id,
-				burner: source_iban,
-				dest_iban: Some(dest_iban.clone()),
+				burner: source_iban.iban,
+				dest_iban: Some(dest_iban.iban.clone()),
 				amount,
 			};
 
@@ -420,7 +430,7 @@ pub mod pallet {
 				request_id,
 				burner: who.clone(),
 				dest: Some(address),
-				dest_iban: Some(dest_iban),
+				dest_iban: Some(dest_iban.iban),
 				amount,
 			});
 
@@ -440,7 +450,7 @@ pub mod pallet {
 		#[pallet::weight(10_000)]
 		pub fn process_statements(
 			origin: OriginFor<T>,
-			statements: Vec<(IbanAccount<T>, Vec<Transaction<T>>)>
+			statements: Vec<(BankAccountOf<T>, Vec<TransactionOf<T>>)>
 		) -> DispatchResultWithPostInfo {
 			// this can be called only by the sudo account
 			ensure_root(origin)?;
@@ -463,16 +473,22 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// A new account has been created
-		NewAccount(T::AccountId),
 		/// New IBAN has been mapped to an account
-		IbanAccountMapped(T::AccountId, IbanOf<T>),
+		AccountCreated(T::AccountId, IbanOf<T>),
 		/// IBAN has been un-mapped from an account
-		IbanAccountUnmapped(T::AccountId, IbanOf<T>),
+		AccountDestroyed(T::AccountId, IbanOf<T>),
 		/// New minted tokens to an account
-		Mint(T::AccountId, IbanOf<T>, BalanceOf<T>),
+		Minted {
+			who: T::AccountId,
+			iban: IbanOf<T>,
+			amount: BalanceOf<T>,
+		},
 		/// New burned tokens from an account
-		Burn(T::AccountId, IbanOf<T>, BalanceOf<T>),
+		Burned {
+			who: T::AccountId,
+			iban: IbanOf<T>,
+			amount: BalanceOf<T>,
+		},
 		/// New Burn request has been made
 		BurnRequest {
 			request_id: u64,
@@ -482,11 +498,25 @@ pub mod pallet {
 			amount: BalanceOf<T>,
 		},
 		/// Transfer event with IBAN numbers
-		Transfer(
-			IbanOf<T>, // from
-			IbanOf<T>, // to
-			BalanceOf<T>
-		)
+		Transfer {
+			from: IbanOf<T>,
+			to: IbanOf<T>,
+			amount: BalanceOf<T>,
+		}
+	}
+
+	#[pallet::error]
+	pub enum Error<T> {
+		/// Account is not mapped to an IBAN
+		AccountNotMapped,
+		/// IBAN is not mapped to an account
+		IbanNotMapped,
+		/// Account not found when trying to map IBAN
+		AccountNotFound,
+		/// Amount is zero
+		AmountIsZero,
+		/// Insufficient funds
+		InsufficientBalance,
 	}
 
 	#[pallet::validate_unsigned]
@@ -576,14 +606,14 @@ impl<T: Config> Pallet<T> {
 	/// # Arguments
 	/// 
 	/// `iban_account`: IbanAccount to check
-	fn should_process_transactions(iban_account: &IbanAccount<T>) -> bool {
+	fn should_process_transactions(iban_account: &BankAccountOf<T>) -> bool {
 		// if iban is not registered in our store, we should process transactions
 		if !Self::iban_exists(&iban_account.iban) {
 			return true;
 		}
 
-		let account_id = IbanToAccount::<T>::iter()
-			.find(|(_, v)| *v == iban_account.iban)
+		let account_id = Accounts::<T>::iter()
+			.find(|(_, v)| *v.iban == iban_account.iban)
 			.unwrap().0;
 
 		// balance of the iban account on chain
@@ -600,12 +630,13 @@ impl<T: Config> Pallet<T> {
 
 	/// Checks if iban is mapped to an account in the storage
 	fn iban_exists(iban: &IbanOf<T>) -> bool {
-		IbanToAccount::<T>::iter().find(|(_, v)| v == iban).is_some()
+		Accounts::<T>::iter().find(|(_, v)| v == iban).is_some()
 	}
 
 	/// Extract AccountId mapped to IbanOf<T>
 	fn get_account_id(iban: &IbanOf<T>) -> Option<T::AccountId> {
-		IbanToAccount::<T>::iter().find(|(_, v)| v == iban).map(|(k, _)| k)
+		Accounts::<T>::
+
 	}
 
 	/// Ensures that an IBAN  is mapped to an account in the storage
@@ -618,7 +649,7 @@ impl<T: Config> Pallet<T> {
 	) -> AccountIdOf<T> {
 		// If iban is already mapped to account, return it
 		if Self::iban_exists(iban) {
-			IbanToAccount::<T>::iter()
+			Accounts::<T>::iter()
 			.find(|(_, v)| v == iban)
 			.unwrap().0
 		}
@@ -626,7 +657,7 @@ impl<T: Config> Pallet<T> {
 			match account {
 				Some(account_id) => {
 					// Simply map iban to account
-					IbanToAccount::<T>::insert(&account_id, iban);
+					Accounts::<T>::insert(&account_id, iban);
 					return account_id;
 				}
 				None => {
@@ -638,7 +669,7 @@ impl<T: Config> Pallet<T> {
 					let new_account_id = <T::AccountId>::decode(&mut &encoded[..]).unwrap();
 
 					// Map new account id to IBAN
-					IbanToAccount::<T>::insert(&new_account_id, iban);
+					Accounts::<T>::insert(&new_account_id, iban);
 
 					return new_account_id;
 				}
@@ -661,7 +692,7 @@ impl<T: Config> Pallet<T> {
 		statement_iban: &IbanOf<T>,
 		source: Option<T::AccountId>,
 		dest: Option<T::AccountId>,
-		transaction: &Transaction<T>,
+		transaction: &TransactionOf<T>,
 		reference: Option<u64>,
 	) {
 		let amount: BalanceOf<T> = BalanceOf::<T>::try_from(transaction.amount).unwrap_or_default();
@@ -682,11 +713,11 @@ impl<T: Config> Pallet<T> {
 						) {
 							Ok(_) => {
 								Self::deposit_event(
-									Event::Transfer(
-										transaction.iban.clone(), // from iban
-										statement_iban.clone(), // to iban
+									Event::Transfer {
+										from: transaction.iban.clone(), // from iban
+										to: statement_iban.clone(), // to iban
 										amount
-									)
+									}
 								)
 							},
 							Err(e) => {
@@ -715,7 +746,7 @@ impl<T: Config> Pallet<T> {
 							mint
 						);
 		
-						Self::deposit_event(Event::Mint(statement_owner.clone(), statement_iban.clone(), amount));
+						Self::deposit_event(Event::Minted{ who: statement_owner.clone(), iban: statement_iban.clone(), amount});
 					}
 				}
 			}
@@ -755,11 +786,11 @@ impl<T: Config> Pallet<T> {
 						) {
 							Ok(_) => {
 								Self::deposit_event(
-									Event::Transfer(
-										statement_iban.clone(), // from iban
-										transaction.iban.clone(), // to iban
-										tx_amount
-									)
+									Event::Transfer {
+										from: statement_iban.clone(), // from iban
+										to: transaction.iban.clone(), // to iban
+										amount: tx_amount
+									}
 								)
 							},
 							Err(e) => {
@@ -786,7 +817,7 @@ impl<T: Config> Pallet<T> {
 						
 						match settle_burn {
 							Ok(()) => {
-								Self::deposit_event(Event::Burn(statement_owner.clone(), transaction.iban.clone(), amount));
+								Self::deposit_event(Event::Burned {who: statement_owner.clone(), iban: transaction.iban.clone(), amount});
 								
 								match reference {
 									Some(request_id) => {
@@ -838,7 +869,7 @@ impl<T: Config> Pallet<T> {
 	/// `transactions: Vec<Transaction>` - list of transactions to process
 	#[cfg(feature = "std")]
 	fn process_transactions(
-		iban_account: &IbanAccount<T>, 
+		iban_account: &BankAccountOf<T>, 
 		transactions: &Vec<TransactionOf<T>>
 	) {
 		// Get account id of the statement owner
@@ -925,10 +956,10 @@ impl<T: Config> Pallet<T> {
 		let reference = format!("{}", request_id);
 
 		// Send request to remote endpoint
-		let body = impls::utils::unpeg_request(
+		let body = impls::utils::unpeg_request::<T>(
 			&format!("{:?}", burner.unwrap_or(Self::account_id())),
 			amount_u128,
-			&dest_iban,
+			&dest_iban.unwrap_or_default(),
 			&reference
 		)
 		.serialize();
@@ -963,13 +994,13 @@ impl<T: Config> Pallet<T> {
 	fn process_burn_requests() -> Result<(), &'static str> {
 		for (request_id, burn_request) in <BurnRequests<T>>::iter() {
 			// This is a default value, should not be processed
-			if burn_request.burner == [0; 21] {
+			if burn_request.burner == IbanOf::<T>::default() {
 				return Ok(());
 			}
 		
 			// Process burn requests that are either not processed yet or failed
 			let dest_account = Self::get_account_id(
-				&burn_request.dest_iban.unwrap_or([0; 21])
+				&burn_request.dest_iban.unwrap_or_default()
 			);
 			
 			// send the unpeg request
@@ -1072,7 +1103,7 @@ impl<T: Config> Pallet<T> {
 	/// 	`iban_account: IbanAccount` - IBAN account that owns the statement
 	/// 	`incoming_txs: Vec<TransactionOf<T>>` - Incoming transactions in the statement
     ///		`outgoing_txs: Vec<TransactionOf<T>>` - Outgoing transactions in the statement
-	fn parse_statements() -> Vec<(IbanAccount<T>, Vec<TransactionOf<T>>)> {
+	fn parse_statements() -> Vec<(BankAccountOf<T>, Vec<TransactionOf<T>>)> {
 		// fetch json value
 		let remote_url = ApiUrl::<T>::get();
 		let json = Self::fetch_json(&remote_url[..]).unwrap();
@@ -1081,10 +1112,10 @@ impl<T: Config> Pallet<T> {
 
 		let statements = match raw_array {
 			Some(v) => {
-				let mut balances: Vec<(IbanAccount<T>, Vec<TransactionOf<T>>)> = Vec::with_capacity(v.len());
+				let mut balances: Vec<(BankAccountOf<T>, Vec<TransactionOf<T>>)> = Vec::with_capacity(v.len());
 				for val in v.iter() {
 					// extract iban account
-					let iban_account = match IbanAccount::<T>::from_json_value(&val) {
+					let iban_account = match BankAccountOf::<T>::from_json_value(&val) {
 						Some(account) => account,
 						None => Default::default(),
 					};
@@ -1105,7 +1136,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	fn validate_tx_parameters(
-		statements: &Vec<(IbanAccount<T>, Vec<Transaction<T>>)>
+		statements: &Vec<(BankAccountOf<T>, Vec<TransactionOf<T>>)>
 	) -> TransactionValidity {
 		// check if we are on time
 		if !Self::should_sync() {

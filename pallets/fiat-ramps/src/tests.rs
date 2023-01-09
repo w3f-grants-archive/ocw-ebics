@@ -4,7 +4,7 @@ use frame_support::{
 };
 use std::sync::Arc;
 use sp_core::{
-    offchain::{testing, OffchainWorkerExt, TransactionPoolExt}, Public as CorePublic, sr25519::Public, ByteArray,
+    offchain::{testing, OffchainWorkerExt, TransactionPoolExt},
 };
 use sp_keystore::{SyncCryptoStore, KeystoreExt};
 use sp_runtime::{ 
@@ -13,12 +13,12 @@ use sp_runtime::{
 use lite_json::Serialize;
 
 use crate::{types::{
-	Transaction, IbanAccount, unpeg_request,
-	TransactionType, Iban,
-}};
+	Transaction, BankAccount,
+	TransactionType, IbanOf
+}, helpers::string_to_bounded_vec, impls::utils::unpeg_request};
 use crate::helpers::{
 	ResponseTypes, StatementTypes,
-	get_mock_response,
+	get_mock_response, 
 };
 use sp_std::convert::TryInto;
 
@@ -77,7 +77,7 @@ fn test_processing(
                 let tx = Extrinsic::decode(&mut &*tx).unwrap();
                 assert_eq!(tx.signature.unwrap().0, 0);
 
-                assert_eq!(tx.call, Call::FiatRampsExample(crate::Call::process_statements {
+                assert_eq!(tx.call, crate::Call::FiatRampsExample(crate::Call::process_statements {
                     statements: parsed_response.clone(),
                 }));
             }
@@ -139,10 +139,10 @@ fn should_make_http_call_and_parse() {
 		
 		let statements = match raw_array {
 			Some(v) => {
-				let mut balances: Vec<(IbanAccount, Vec<Transaction>)> = Vec::with_capacity(v.len());
+				let mut balances: Vec<(BankAccount, Vec<Transaction>)> = Vec::with_capacity(v.len());
 				for val in v.iter() {
 					// extract iban account
-					let iban_account = match IbanAccount::from_json_value(&val) {
+					let iban_account = match BankAccount::from_json_value(&val) {
 						Some(account) => account,
 						None => Default::default(),
 					};
@@ -216,9 +216,9 @@ fn test_iban_mapping() {
 	let bob = test_accounts[1].clone();
 	let charlie = test_accounts[2].clone();
 
-	let alice_iban: Iban = "CH2108307000289537320".as_bytes().try_into().expect("Failed to convert string to bytes");
-	let bob_iban: Iban = "CH1230116000289537312".as_bytes().try_into().expect("Failed to convert string to bytes");
-	let charlie_iban: Iban = "CH1230116000289537313".as_bytes().try_into().expect("Failed to convert string to bytes");
+	let alice_iban: IbanOf<Test> = string_to_bounded_vec("CH2108307000289537320");
+	let bob_iban: IbanOf<Test> = string_to_bounded_vec("CH1230116000289537312");
+	let charlie_iban: IbanOf<Test> = string_to_bounded_vec("CH1230116000289537313");
 
 	t.execute_with(|| {
 		assert_ok!(FiatRampsExample::map_iban_account(
@@ -276,9 +276,9 @@ fn test_burn_request() {
 	let bob = test_accounts[1].clone();
 	let charlie = test_accounts[2].clone();
 
-	let alice_iban: Iban = "CH2108307000289537320".as_bytes().try_into().expect("Failed to convert string to bytes");
-	let bob_iban: Iban = "CH1230116000289537312".as_bytes().try_into().expect("Failed to convert string to bytes");
-	let charlie_iban: Iban = "CH1230116000289537313".as_bytes().try_into().expect("Failed to convert string to bytes");
+	let alice_iban: IbanOf<Test> = string_to_bounded_vec("CH2108307000289537320");
+	let bob_iban: IbanOf<Test> = string_to_bounded_vec("CH1230116000289537312");
+	let charlie_iban: IbanOf<Test> = string_to_bounded_vec("CH1230116000289537313");
 
 	{
 		let mock_unpeg_request = unpeg_request(
@@ -360,7 +360,7 @@ fn test_burn_request() {
 			amount: u128,
 			burner: &AccountId,
 			_dest_account: Option<&AccountId>,
-			dest_iban: Option<&Iban>,
+			dest_iban: Option<&IbanOf<Test>>,
 		) {
 			// Check if burn request has been added to the queue
 			let burn_request = FiatRampsExample::burn_request(request_counter);

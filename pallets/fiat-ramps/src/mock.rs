@@ -1,5 +1,6 @@
 
 use crate::{self as fiat_ramps, crypto::Public};
+use codec::{MaxEncodedLen, Decode, Encode};
 use frame_support::{
 	parameter_types, 
 };
@@ -114,17 +115,23 @@ impl pallet_timestamp::Config for Test {
 	type WeightInfo = ();
 }
 
+impl pallet_sudo::Config for Test {
+	type RuntimeEvent = RuntimeEvent;
+	type RuntimeCall = RuntimeCall;
+}
+
 parameter_types!{
 	pub const MinimumInterval: u64 = MILLISECS_PER_BLOCK;
 	pub const UnsignedPriority: u64 = 1000;
 	/// We set decimals for fiat currencies to 2
 	/// (e.g. 1 EUR = 1.00 EUR)
 	pub const Decimals: u8 = 10;
-}
-
-impl pallet_sudo::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
-	type RuntimeCall = RuntimeCall;
+	/// Maximum number of characters in IBAN
+	#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, MaxEncodedLen)]
+	pub const MaxIbanLength: u8 = 34;
+	/// Bound of string length
+	#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, MaxEncodedLen)]
+	pub const MaxStringLength: u8 = 255;
 }
 
 impl fiat_ramps::Config for Test {
@@ -135,6 +142,8 @@ impl fiat_ramps::Config for Test {
 	type TimeProvider = Timestamp;
 	type MinimumInterval = MinimumInterval;
 	type UnsignedPriority = UnsignedPriority;
+	type MaxIbanLength = MaxIbanLength;
+	type MaxStringLength = MaxStringLength;
 }
 
 impl<C> frame_system::offchain::SendTransactionTypes<C> for Test
