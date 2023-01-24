@@ -65,7 +65,7 @@ pub(crate) fn get_mock_response<T: Config>(
 							behaviour: AccountBehaviour::Keep,
 						},
 						vec![
-							Transaction::<T>{
+							TransactionOf::<T>{
 								iban: bob_iban.clone(),
 								name: string_to_bounded_vec::<T::MaxStringLength>("Bob"),
 								amount: 1000000000000,

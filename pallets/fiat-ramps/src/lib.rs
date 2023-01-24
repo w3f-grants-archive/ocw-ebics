@@ -34,7 +34,7 @@ use sp_runtime::{
 	},
 	offchain::storage::{MutateStorageError, StorageRetrievalError, StorageValueRef}
 };
-use sp_std::{fmt::Debug, prelude::Vec};
+use sp_std::{fmt::Debug, convert::TryInto, prelude::Vec};
 use sp_runtime::DispatchError;
 use sp_std::{ convert::TryFrom, vec, default::Default };
 use lite_json::{
@@ -244,72 +244,18 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		/// Generic burn extrinsic
+		/// Single transfer extrinsic which works for 3 different types of transfers:
 		/// 
-		/// Creates new burn request in the pallet and sends `unpeq` request to remote endpoint
-		/// 
-		/// # Arguments
-		/// 
-		/// `amount`: Amount of tokens to burn
-		#[pallet::weight(1000)]
-		pub fn burn(
-			origin: OriginFor<T>,
-			amount: BalanceOf<T>,
-		) -> DispatchResultWithPostInfo {
-			let who = ensure_signed(origin)?;
-
-			// do basic validations
-			let balance = T::Currency::free_balance(&who);
-
-			ensure!(
-				balance >= amount,
-				Error::<T>::InsufficientBalance,
-			);
-
-			ensure!(
-				amount.saturated_into::<u128>() > 0,
-				Error::<T>::AmountIsZero,
-			);
-
-			// transfer amount to this pallet's account
-			T::Currency::transfer(&who, &Self::account_id(), amount, ExistenceRequirement::AllowDeath)
-				.map_err(|_| DispatchError::Other("Can't burn funds"))?;
-			
-			let dest_account = Self::account_of(&who).ok_or(Error::<T>::AccountNotFound)?;
-
-			let request_id = Self::burn_request_count();
-
-			let burn_request = BurnRequest {
-				id: request_id,
-				burner: dest_account.iban.clone(),
-				dest_iban: Some(dest_account.iban.clone()),
-				amount,
-			};
-
-			// Create new burn request in the storage
-			<BurnRequests<T>>::insert(request_id, burn_request.clone());
-			
-			// Increase burn request count
-			<BurnRequestCount<T>>::put(request_id + 1);
-
-			// create burn request event
-			Self::deposit_event(Event::BurnRequest {
-				request_id,
-				burner: who.clone(),
-				dest: Some(who),
-				dest_iban: Some(dest_account.iban),
-				amount,
-			});
-
-			Ok(().into())
-		}
-
-		/// Similar to `burn` but burns `amount` by sending it to `iban`
+		/// 1. Withdrawal of on-chain funds to the linked IBAN account in `Accounts`
+		/// 2. Transfer to specified IBAN account. This will try to find the linked on-chain account and
+		///   transfer to it if it exists, otherwise it will transfer to the IBAN account off-chain
+		/// 3. Transfer to the on-chain address
 		/// 
 		/// # Arguments
 		/// 
 		/// `amount`: Amount of tokens to burn
 		/// `iban`: IbanOf<T> account of the receiver
+		/// `dest`: `TransferDestination` enum which can be either `Iban`, `AccountId` or withdrawal
 		#[pallet::weight(1000)]
 		pub fn transfer(
 			origin: OriginFor<T>,
@@ -318,10 +264,8 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 			
-			let balance = T::Currency::free_balance(&who);
-
 			ensure!(
-				balance >= amount,
+				T::Currency::free_balance(&who) >= amount,
 				Error::<T>::InsufficientBalance,
 			);
 
@@ -341,10 +285,11 @@ pub mod pallet {
 			let source_account = Accounts::<T>::get(&who).ok_or(Error::<T>::AccountNotFound)?;
 
 			let dest_iban = match dest {
-				TransferDestinationOf::Iban(iban) => Ok(iban),
-				TransferDestinationOf::Account(dest_account) => {
+				TransferDestination::Iban(iban) => Ok(iban),
+				TransferDestination::Address(dest_account) => {
 					Accounts::<T>::get(&dest_account).ok_or(Error::<T>::AccountNotFound).map(|account| account.iban)
-				}
+				},
+				TransferDestination::Withdraw => Ok(source_account.iban.clone()),
 			}?;
 
 			let burn_request = BurnRequest {
@@ -361,76 +306,17 @@ pub mod pallet {
 			<BurnRequestCount<T>>::put(request_id + 1);
 
 			// Extract destination account from iban
-			let dest_account = Self::get_account_id(&iban);
+			let dest_address = match dest {
+				TransferDestination::Withdraw => Some(who),
+				_ => Self::get_account_id(&dest_iban),
+			};
 
 			// create burn request event
 			Self::deposit_event(Event::BurnRequest {
 				request_id,
 				burner: who,
-				dest: dest_account,
+				dest: dest_address,
 				dest_iban: Some(dest_iban),
-				amount,
-			});
-
-			Ok(().into())
-		}
-
-		/// Similar to `burn` but burns `amount` by transfering it to `account` on-chain
-		/// 
-		/// # Arguments
-		/// 
-		/// `amount`: Amount of tokens to burn
-		/// `account`: AccountId of the receiver
-		#[pallet::weight(1000)]
-		pub fn transfer_to_address(
-			origin: OriginFor<T>,
-			amount: BalanceOf<T>,
-			address: AccountIdOf<T>,
-		) -> DispatchResultWithPostInfo {
-			let who = ensure_signed(origin)?;
-			
-			let balance = T::Currency::free_balance(&who);
-
-			ensure!(
-				balance >= amount,
-				"Not enough balance to burn",
-			);
-
-			ensure!(
-				amount.saturated_into::<u128>() > 0,
-				"Amount to burn is too low",
-			);
-
-			// transfer amount to this pallet's account
-			T::Currency::transfer(&who, &Self::account_id(), amount, ExistenceRequirement::AllowDeath)
-				.map_err(|_| DispatchError::Other("Can't burn funds"))?;
-			
-			// Request id (nonce)
-			let request_id = Self::burn_request_count();
-
-			// Extract IBAN addresses of accounts
-			let source_iban = Self::iban_to_account(&who);
-			let dest_iban = Self::iban_to_account(&address);
-
-			let burn_request = BurnRequest {
-				id: request_id,
-				burner: source_iban.iban,
-				dest_iban: Some(dest_iban.iban.clone()),
-				amount,
-			};
-
-			// Create new burn request in the storage
-			<BurnRequests<T>>::insert(request_id, burn_request.clone());
-			
-			// Increase burn request count
-			<BurnRequestCount<T>>::put(request_id + 1);
-
-			// create burn request event
-			Self::deposit_event(Event::BurnRequest {
-				request_id,
-				burner: who.clone(),
-				dest: Some(address),
-				dest_iban: Some(dest_iban.iban),
 				amount,
 			});
 
@@ -613,7 +499,7 @@ impl<T: Config> Pallet<T> {
 		}
 
 		let account_id = Accounts::<T>::iter()
-			.find(|(_, v)| *v.iban == iban_account.iban)
+			.find(|(_, v)| &v.iban == &iban_account.iban)
 			.unwrap().0;
 
 		// balance of the iban account on chain
@@ -630,13 +516,12 @@ impl<T: Config> Pallet<T> {
 
 	/// Checks if iban is mapped to an account in the storage
 	fn iban_exists(iban: &IbanOf<T>) -> bool {
-		Accounts::<T>::iter().find(|(_, v)| v == iban).is_some()
+		Accounts::<T>::iter().find(|(_, v)| &v.iban == iban).is_some()
 	}
 
 	/// Extract AccountId mapped to IbanOf<T>
 	fn get_account_id(iban: &IbanOf<T>) -> Option<T::AccountId> {
-		Accounts::<T>::
-
+		Accounts::<T>::iter().find(|(_, v)| &v.iban == iban).map(|(k, _)| k)
 	}
 
 	/// Ensures that an IBAN  is mapped to an account in the storage
@@ -650,10 +535,9 @@ impl<T: Config> Pallet<T> {
 		// If iban is already mapped to account, return it
 		if Self::iban_exists(iban) {
 			Accounts::<T>::iter()
-			.find(|(_, v)| v == iban)
+			.find(|(_, v)| &v.iban == iban)
 			.unwrap().0
-		}
-		else {
+		}else {
 			match account {
 				Some(account_id) => {
 					// Simply map iban to account

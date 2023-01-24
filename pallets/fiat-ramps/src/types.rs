@@ -104,7 +104,7 @@ pub struct Transaction<MaxLength: Get<u32>, StringMaxLength: Get<u32>> {
 /// Behavior of a bank account on-chain
 /// 
 /// This defines what a bank account should do when it receives an extrinsic
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum AccountBehaviour<MaxLength: Get<u32>> {
 	/// Keep the balance of the account on-chain
 	Keep,
@@ -131,11 +131,24 @@ pub struct BankAccount<MaxLength: Get<u32>> {
 	pub behaviour: AccountBehaviour<MaxLength>,
 }
 
+impl<MaxLength: Get<u32>> From<Iban<MaxLength>> for BankAccount<MaxLength> {
+	fn from(iban: Iban<MaxLength>) -> Self {
+		Self {
+			iban,
+			balance: 0,
+			last_updated: 0,
+			behaviour: AccountBehaviour::Keep,
+		}
+	}
+}
+
 /// Burn destination
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 pub enum TransferDestination<MaxLength: Get<u32>, AccountId> {
 	/// Burn to a specific IBAN
 	Iban(Iban<MaxLength>),
 	/// Burn to another account, i.e transfer on-chain
-	Account(AccountId),
+	Address(AccountId),
+	/// Withdraw
+	Withdraw,
 }

@@ -103,36 +103,34 @@ impl<MaxIbanLength: Get<u32>, MaxStringLength: Get<u32>> Transaction<MaxIbanLeng
         }
 	}
 	
-	/// Parse multiple transactions from JsonValue
+	/// Parse multiple transactions from `JsonValue`
 	pub fn parse_transactions(json: &JsonValue, transaction_type: TransactionType) -> Option<Vec<Self>> {
-		let parsed_transactions = match json {
+        // Get the key string for the transaction type
+        let key_string = match transaction_type {
+            TransactionType::Incoming => "incomingTransactions",
+            TransactionType::Outgoing => "outgoingTransactions",
+            _ => return None,
+        };
+
+        let mut transactions = Vec::new();
+        
+		match json {
 			JsonValue::Object(obj) => {
-				let transactions = match transaction_type {
-					TransactionType::Incoming => {
-						let incoming_transactions = match parse_object("incomingTransactions", obj) {
-							JsonValue::Array(txs) => {
-								txs.iter().map(|json| Self::from_json_statement(json, &transaction_type).unwrap_or_default()).collect::<Vec<Transaction<MaxIbanLength, MaxStringLength>>>()
-							}
-							_ => return None,
-						};
-						incoming_transactions
-					},
-					TransactionType::Outgoing => {
-						let outgoing_transactions = match parse_object("outgoingTransactions", obj) {
-							JsonValue::Array(txs) => {
-								txs.iter().map(|json| Self::from_json_statement(json, &transaction_type).unwrap_or(Default::default())).collect::<Vec<Transaction<MaxIbanLength, MaxStringLength>>>()
-							}
-							_ => return None,
-						};
-						outgoing_transactions
-					},
-					_ => Default::default()
-				};
-				transactions
-			},
-			_ => return None
+                match parse_object(key_string, &obj) {
+                    JsonValue::Array(txs) => {
+                        for json_tx in txs {
+                            if let Some(tx) = Self::from_json_statement(&json_tx, &transaction_type) {
+                                transactions.push(tx);
+                            }
+                        }
+                    },
+                    _ => {}
+                }
+            },
+			_ => {}
 		};
-		Some(parsed_transactions)
+
+        Some(transactions)
 	}
 }
 
