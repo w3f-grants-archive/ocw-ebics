@@ -94,10 +94,10 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxStringLength: Get<u32> + PartialEq + Eq + MaxEncodedLen + TypeInfo + Debug + Clone;
 
-		// This ensures that we only accept unsigned transactions once, every `UnsignedInterval` blocks.
+		/// This ensures that we only accept unsigned transactions once, every `UnsignedInterval` blocks.
 		#[pallet::constant]
 		type MinimumInterval: Get<u64>;
-		
+	
 		/// A configuration for base priority of unsigned transactions.
 		///
 		/// This is exposed so that it can be tuned for particular runtime, when
@@ -295,7 +295,7 @@ pub mod pallet {
 			let burn_request = BurnRequest {
 				id: request_id,
 				burner: source_account.iban.clone(),
-				dest_iban: Some(dest_iban.clone()),
+				dest_iban: dest_iban.clone(),
 				amount,
 			};
 
@@ -316,7 +316,7 @@ pub mod pallet {
 				request_id,
 				burner: who,
 				dest: dest_address,
-				dest_iban: Some(dest_iban),
+				dest_iban,
 				amount,
 			});
 
@@ -380,7 +380,7 @@ pub mod pallet {
 			request_id: u64,
 			burner: T::AccountId,
 			dest: Option<T::AccountId>,
-			dest_iban: Option<IbanOf<T>>,
+			dest_iban: IbanOf<T>,
 			amount: BalanceOf<T>,
 		},
 		/// Transfer event with IBAN numbers
@@ -539,9 +539,9 @@ impl<T: Config> Pallet<T> {
 			.unwrap().0
 		}else {
 			match account {
-				Some(account_id) => {
+				Some(account_id) => {  
 					// Simply map iban to account
-					Accounts::<T>::insert(&account_id, iban);
+					Accounts::<T>::insert(&account_id, iban.into());
 					return account_id;
 				}
 				None => {
@@ -553,7 +553,7 @@ impl<T: Config> Pallet<T> {
 					let new_account_id = <T::AccountId>::decode(&mut &encoded[..]).unwrap();
 
 					// Map new account id to IBAN
-					Accounts::<T>::insert(&new_account_id, iban);
+					Accounts::<T>::insert(&new_account_id, iban.into());
 
 					return new_account_id;
 				}
@@ -578,171 +578,112 @@ impl<T: Config> Pallet<T> {
 		dest: Option<T::AccountId>,
 		transaction: &TransactionOf<T>,
 		reference: Option<u64>,
-	) {
+	) -> DispatchResult {
 		let amount: BalanceOf<T> = BalanceOf::<T>::try_from(transaction.amount).unwrap_or_default();
 
 		// Process transaction based on its type
 		match transaction.tx_type {
 			TransactionType::Incoming => {
-				match source {
-					Some(sender) => {
-						log::info!("[OCW] Transfer from {:?} to {:?} {:?}", sender, statement_owner, amount.clone());
-						
-						// make transfer from sender to statement owner
-						match <T>::Currency::transfer(
-							&sender,
-							statement_owner, 
-							amount, 
-							ExistenceRequirement::AllowDeath
-						) {
-							Ok(_) => {
-								Self::deposit_event(
-									Event::Transfer {
-										from: transaction.iban.clone(), // from iban
-										to: statement_iban.clone(), // to iban
-										amount
-									}
-								)
-							},
-							Err(e) => {
-								log::error!(
-									"[OCW] Transfer from {:?} to {:?} {:?} failed: {:?}", 
-									&sender, 
-									statement_owner, 
-									amount.clone(), 
-									e
-								);
-							}
-						}
-					},
-					None => {
-						// Sender is not on-chain, therefore we simply mint to statement owner
-						log::info!("[OCW] Mint to {:?} {:?}", statement_owner, amount.clone());
+				if let Some(sender) = source {
+					T::Currency::transfer(
+						&sender,
+						statement_owner, 
+						amount, 
+						ExistenceRequirement::AllowDeath
+					)?;
+				} else {
+					// Sender is not on-chain, therefore we simply mint to statement owner
+					log::info!("[OCW] Mint to {:?} {:?}", statement_owner, amount.clone());
 
-						// Returns negative imbalance
-						let mint = <T>::Currency::issue(
-							amount.clone()
-						);
-		
-						// deposit negative imbalance into the account
-						<T>::Currency::resolve_creating(
-							statement_owner,
-							mint
-						);
-		
-						Self::deposit_event(Event::Minted{ who: statement_owner.clone(), iban: statement_iban.clone(), amount});
-					}
+					// Returns negative imbalance
+					let mint = T::Currency::issue(
+						amount.clone()
+					);
+
+					// deposit negative imbalance into the account
+					T::Currency::resolve_creating(
+						statement_owner,
+						mint
+					);
+
+					Self::deposit_event(Event::Minted{ who: statement_owner.clone(), iban: statement_iban.clone(), amount});
 				}
-			}
+			},
 			TransactionType::Outgoing => {
-				match dest {
-					Some(receiver) => {
-						log::info!("[OCW] Transfer from {:?} to {:?} {:?}", statement_owner, receiver, &amount);
+				if let Some(receiver) = dest {
+					let burn_request = reference.map_or(None, |request_id| BurnRequests::<T>::take(request_id));
+					
+					// Here we get the actual sender and receiver of the transaction
+					// If user has submitted burn request, his funds are stored in the pallet's account
+					// and if we detect that the reference field is populated with a burn request id,
+					// we can transfer the funds from the pallet's account to the specified destination
+					// account specified in the burn request.
+					//
+					// Otherwise, we simply transfer the funds from the statement owner to the receiver
+					let (from, to, tx_amount) = match burn_request {
+						Some(request) => {
+							let dest_account = Self::get_account_id(&request.dest_iban).unwrap_or(receiver.clone());
+							(Self::account_id(), dest_account, request.amount)
+						},
+						None => (statement_owner.clone(), receiver.clone(), amount)
+					};
 
-						let burn_request = match reference {
-							Some(request_id) => {
-								Some(BurnRequests::<T>::take(request_id))
-							},
-							None => None
-						};
+					T::Currency::transfer(
+						&from,
+						&to,
+						tx_amount,
+						ExistenceRequirement::AllowDeath
+					)?;
+				} else {
+					// Receiver is not on-chain, therefore we simply burn from statement owner
+					log::info!("[OCW] Burn from {:?} {:?}", statement_owner, amount.clone());
 
-						// Here we get the actual sender and receiver of the transaction
-						// If user has submitted burn request, his funds are stored in the pallet's account
-						// and if we detect that the reference field is populated with a burn request id,
-						// we can transfer the funds from the pallet's account to the specified destination
-						// account specified in the burn request.
-						//
-						// Otherwise, we simply transfer the funds from the statement owner to the receiver
-						let (from, to, tx_amount) = match burn_request {
-							Some(request) => {
-								let dest_account = Self::get_account_id(&request.dest_iban.unwrap()).unwrap();
-								(Self::account_id(), dest_account, request.amount)
-							},
-							None => (statement_owner.clone(), receiver.clone(), amount)
-						};
+					// Returns negative imbalance
+					let burn = <T>::Currency::burn(
+						amount.clone()
+					);
+	
+					// Burn negative imbalance from the account
+					if let Ok(_) = T::Currency::settle(
+						statement_owner,
+						burn,
+						WithdrawReasons::TRANSFER,
+						ExistenceRequirement::KeepAlive
+					) {
+						Self::deposit_event(Event::Burned {who: statement_owner.clone(), iban: transaction.iban.clone(), amount});
+						let (request_id, maybe_request) = reference.map_or(None, |request_id| return (request_id, BurnRequests::<T>::take(request_id)));
 						
-						// make transfer from statement owner to receiver
-						match <T>::Currency::transfer(
-							&from,
-							&to,
-							tx_amount,
-							ExistenceRequirement::AllowDeath
-						) {
-							Ok(_) => {
-								Self::deposit_event(
-									Event::Transfer {
-										from: statement_iban.clone(), // from iban
-										to: transaction.iban.clone(), // to iban
-										amount: tx_amount
-									}
-								)
-							},
-							Err(e) => {
-								log::error!("[OCW] Transfer from {:?} to {:?} {:?} failed: {:?}", from, to, amount.clone(), e);
+						if let Some(request) = maybe_request {
+							Self::deposit_event(Event::BurnRequest {
+								request_id,
+								burner: statement_owner.clone(),
+								dest: Self::get_account_id(&request.dest_iban.unwrap()),
+								dest_iban: request.dest_iban,
+								amount: request.amount,
+							});
+
+							// Returns negative imbalance
+							let burn = T::Currency::burn(
+								request.amount
+							);
+			
+							// Burn negative imbalance from the account
+							match T::Currency::settle(
+								&Self::account_id(),
+								burn,
+								WithdrawReasons::TRANSFER,
+								ExistenceRequirement::KeepAlive
+							) {
+								Ok(()) => log::info!("[OCW] Burn from pallet {:?} {:?}", Self::account_id(), request.amount),
+								_ => log::info!("[OCW] Failed to burn from account {:?} {:?}", Self::account_id(), request.amount)
 							}
-						}
-					},
-					None => {
-						// Receiver is not on-chain, therefore we simply burn from statement owner
-						log::info!("[OCW] Burn from {:?} {:?}", statement_owner, amount.clone());
-
-						// Returns negative imbalance
-						let burn = <T>::Currency::burn(
-							amount.clone()
-						);
-		
-						// Burn negative imbalance from the account
-						let settle_burn = <T>::Currency::settle(
-							statement_owner,
-							burn,
-							WithdrawReasons::TRANSFER,
-							ExistenceRequirement::KeepAlive
-						);
-						
-						match settle_burn {
-							Ok(()) => {
-								Self::deposit_event(Event::Burned {who: statement_owner.clone(), iban: transaction.iban.clone(), amount});
-								
-								match reference {
-									Some(request_id) => {
-										let request = BurnRequests::<T>::take(request_id);
-
-										Self::deposit_event(Event::BurnRequest {
-											request_id,
-											burner: statement_owner.clone(),
-											dest: Self::get_account_id(&request.dest_iban.unwrap()),
-											dest_iban: request.dest_iban,
-											amount: request.amount,
-										});
-
-										// Returns negative imbalance
-										let burn = <T>::Currency::burn(
-											request.amount
-										);
-						
-										// Burn negative imbalance from the account
-										match <T>::Currency::settle(
-											&Self::account_id(),
-											burn,
-											WithdrawReasons::TRANSFER,
-											ExistenceRequirement::KeepAlive
-										) {
-											Ok(()) => log::info!("[OCW] Burn from pallet {:?} {:?}", Self::account_id(), request.amount),
-											_ => log::info!("[OCW] Failed to burn from account {:?} {:?}", Self::account_id(), request.amount)
-										}
-									},
-									None => {}
-								}
-							},
-							Err(e) => log::error!("[OCW] Encountered err: {:?}", e.peek()),
 						}
 					}
 				}
-			}
-			_ => {
-				log::error!("[OCW] Unknown transaction type: {:?}", transaction.tx_type);
 			}
 		}
+
+		Ok(())
 	}
 
 	/// Process list of transactions for a given iban account
@@ -755,9 +696,12 @@ impl<T: Config> Pallet<T> {
 	fn process_transactions(
 		iban_account: &BankAccountOf<T>, 
 		transactions: &Vec<TransactionOf<T>>
-	) {
+	) -> DispatchResult {
 		// Get account id of the statement owner
 		let statement_owner = Self::ensure_iban_is_mapped(&iban_account.iban, None);
+
+		// contains index of transaction that failed
+		let failed_transactions: Vec<u32> = vec![];
 
 		for transaction in transactions {
 			// decode destination account id from reference
@@ -799,7 +743,8 @@ impl<T: Config> Pallet<T> {
 				.parse::<u64>()
 				.ok();
 
-			Self::process_transaction(
+			
+			let call_result = Self::process_transaction(
 				&statement_owner,
 				&iban_account.iban,
 				source, 
@@ -808,6 +753,8 @@ impl<T: Config> Pallet<T> {
 				reference
 			);
 		}
+
+		Ok(())
 	}
 
 	/// Send unpeq request to the remote endpoint

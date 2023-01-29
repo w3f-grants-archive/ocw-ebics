@@ -61,7 +61,7 @@ pub enum OcwActivity {
 pub struct BurnRequest<MaxLength: Get<u32>, Balance: MaxEncodedLen> {
 	pub id: u64,
 	pub burner: Iban<MaxLength>,
-	pub dest_iban: Option<Iban<MaxLength>>,
+	pub dest_iban: Iban<MaxLength>,
 	pub amount: Balance,
 }
 
