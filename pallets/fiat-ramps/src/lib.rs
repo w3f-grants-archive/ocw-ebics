@@ -9,7 +9,7 @@ use frame_support::{
 	pallet_prelude::*,
 	traits::{
 		Get, UnixTime, Currency, LockableCurrency,
-		ExistenceRequirement, WithdrawReasons, Imbalance
+		ExistenceRequirement, WithdrawReasons,
 	},
 	ensure,
 	dispatch::DispatchResultWithPostInfo
@@ -32,7 +32,8 @@ use sp_runtime::{
 	transaction_validity::{
 		InvalidTransaction, TransactionValidity,
 	},
-	offchain::storage::{MutateStorageError, StorageRetrievalError, StorageValueRef}
+	offchain::storage::{MutateStorageError, StorageRetrievalError, StorageValueRef},
+	traits::AccountIdConversion,
 };
 use sp_std::{fmt::Debug, convert::TryInto, prelude::Vec};
 use sp_runtime::DispatchError;
@@ -45,17 +46,20 @@ use lite_json::{
 #[cfg(feature = "std")]
 use sp_core::crypto::Ss58Codec;
 
-mod helpers;
 pub mod types;
 mod impls;
 pub mod crypto;
+mod utils;
 
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
 pub mod mock;
+#[cfg(test)]
+mod helpers;
 
 use crate::types::*;
+use utils::*;
 
 pub use pallet::*;
 
@@ -214,7 +218,7 @@ pub mod pallet {
 
 			// TO-DO: need to check if account owner really owns this IBAN
 			Accounts::<T>::insert(&who, BankAccount::<T::MaxIbanLength> {
-				iban,
+				iban: iban.clone(),
 				behaviour,
 				balance: 0u128,
 				last_updated: T::TimeProvider::now().as_millis() as u64,
@@ -284,7 +288,7 @@ pub mod pallet {
 			// Get bank account associated with the sender
 			let source_account = Accounts::<T>::get(&who).ok_or(Error::<T>::AccountNotFound)?;
 
-			let dest_iban = match dest {
+			let dest_iban = match dest.clone() {
 				TransferDestination::Iban(iban) => Ok(iban),
 				TransferDestination::Address(dest_account) => {
 					Accounts::<T>::get(&dest_account).ok_or(Error::<T>::AccountNotFound).map(|account| account.iban)
@@ -307,7 +311,7 @@ pub mod pallet {
 
 			// Extract destination account from iban
 			let dest_address = match dest {
-				TransferDestination::Withdraw => Some(who),
+				TransferDestination::Withdraw => Some(who.clone()),
 				_ => Self::get_account_id(&dest_iban),
 			};
 
@@ -348,7 +352,7 @@ pub mod pallet {
 				
 				if should_process {
 					#[cfg(feature = "std")]
-					Self::process_transactions(&iban_account, &transactions);
+					Self::process_transactions(&iban_account, &transactions)?;
 				}
 			}
 
@@ -418,10 +422,11 @@ pub mod pallet {
 	}
 }
 
+/// Utility functions
 impl<T: Config> Pallet<T> {
 	/// AccountId associated with Pallet
 	fn account_id() -> T::AccountId {
-		PALLET_ID.into_account()
+		PALLET_ID.try_into_account().expect("Should never fail")
 	}
 
 	/// Returns the action to take
@@ -480,7 +485,7 @@ impl<T: Config> Pallet<T> {
 			Ok(_now) => true,
 			Err(MutateStorageError::ValueFunctionFailed(RECENTLY_SENT)) => false,
 			Err(MutateStorageError::ConcurrentModification(_)) => false
-		}	
+		}
 	}
 
 	/// Determines if we should process transactions for the statement
@@ -537,30 +542,31 @@ impl<T: Config> Pallet<T> {
 			Accounts::<T>::iter()
 			.find(|(_, v)| &v.iban == iban)
 			.unwrap().0
-		}else {
-			match account {
-				Some(account_id) => {  
-					// Simply map iban to account
-					Accounts::<T>::insert(&account_id, iban.into());
-					return account_id;
-				}
-				None => {
-					// Generate new keypair
-					let (pair, _, _) = <crypto::Pair as sp_core::Pair>::generate_with_phrase(None);
-					
-					// Convert AccountId32 to AccountId
-					let encoded = sp_core::Pair::public(&pair).encode();
-					let new_account_id = <T::AccountId>::decode(&mut &encoded[..]).unwrap();
+		} else {
+			let bank_account: BankAccountOf<T> = iban.into();
+			if let Some(account_id) = account {
+				// Simply map iban to account
+				Accounts::<T>::insert(&account_id, bank_account);
+				return account_id;
+			} else {
+				// Generate new keypair
+				let (pair, _, _) = <crypto::Pair as sp_core::Pair>::generate_with_phrase(None);
+				
+				// Convert AccountId32 to AccountId
+				let encoded = sp_core::Pair::public(&pair).encode();
+				let new_account_id = <T::AccountId>::decode(&mut &encoded[..]).unwrap();
 
-					// Map new account id to IBAN
-					Accounts::<T>::insert(&new_account_id, iban.into());
+				// Map new account id to IBAN
+				Accounts::<T>::insert(&new_account_id, bank_account);
 
-					return new_account_id;
-				}
+				return new_account_id;
 			}
 		}
 	}
+}
 
+/// Functions related to statement processing
+impl<T: Config> Pallet<T> {
 	/// Process a single transaction
 	/// 
 	/// ### Arguments
@@ -651,13 +657,16 @@ impl<T: Config> Pallet<T> {
 						ExistenceRequirement::KeepAlive
 					) {
 						Self::deposit_event(Event::Burned {who: statement_owner.clone(), iban: transaction.iban.clone(), amount});
-						let (request_id, maybe_request) = reference.map_or(None, |request_id| return (request_id, BurnRequests::<T>::take(request_id)));
-						
+						let (request_id, maybe_request) = match reference {
+							Some(request_id) => (request_id, BurnRequests::<T>::take(request_id)),
+							None => (0, None)
+						};
+
 						if let Some(request) = maybe_request {
 							Self::deposit_event(Event::BurnRequest {
 								request_id,
 								burner: statement_owner.clone(),
-								dest: Self::get_account_id(&request.dest_iban.unwrap()),
+								dest: Self::get_account_id(&request.dest_iban),
 								dest_iban: request.dest_iban,
 								amount: request.amount,
 							});
@@ -666,21 +675,18 @@ impl<T: Config> Pallet<T> {
 							let burn = T::Currency::burn(
 								request.amount
 							);
-			
-							// Burn negative imbalance from the account
-							match T::Currency::settle(
+							
+							let _ = T::Currency::settle(
 								&Self::account_id(),
 								burn,
 								WithdrawReasons::TRANSFER,
 								ExistenceRequirement::KeepAlive
-							) {
-								Ok(()) => log::info!("[OCW] Burn from pallet {:?} {:?}", Self::account_id(), request.amount),
-								_ => log::info!("[OCW] Failed to burn from account {:?} {:?}", Self::account_id(), request.amount)
-							}
+							);
 						}
 					}
 				}
 			}
+			_ => {}
 		}
 
 		Ok(())
@@ -701,9 +707,11 @@ impl<T: Config> Pallet<T> {
 		let statement_owner = Self::ensure_iban_is_mapped(&iban_account.iban, None);
 
 		// contains index of transaction that failed
-		let failed_transactions: Vec<u32> = vec![];
+		let mut failed_transactions: Vec<u32> = vec![];
 
-		for transaction in transactions {
+		// Iterate over all transactions, with index
+
+		for (i, transaction) in transactions.iter().enumerate() {
 			// decode destination account id from reference
 			let reference_str = core::str::from_utf8(&transaction.reference).unwrap_or("default");
 
@@ -724,7 +732,7 @@ impl<T: Config> Pallet<T> {
 
 			// Destination (recipient) of the transaction
 			let dest = match AccountId32::from_ss58check(&reference_decoded[0][5..]) {
-				Ok(dest) => Some(<T::AccountId>::decode(&mut &dest.encode()[..]).unwrap()),
+				Ok(dest) => Some(<T::AccountId>::decode(&mut &dest.encode()[..]).expect("Should not fail; qed")),
 				Err(_e) => {
 					log::error!("[OCW] Failed to decode destination account from reference");
 					match transaction.tx_type {
@@ -744,14 +752,16 @@ impl<T: Config> Pallet<T> {
 				.ok();
 
 			
-			let call_result = Self::process_transaction(
+			if let Err(_) = Self::process_transaction(
 				&statement_owner,
 				&iban_account.iban,
 				source, 
 				dest, 
 				transaction, 
 				reference
-			);
+			) {
+				failed_transactions.push(i as u32);
+			}
 		}
 
 		Ok(())
@@ -770,7 +780,7 @@ impl<T: Config> Pallet<T> {
 	fn unpeg(
 		request_id: u64,
 		burner: Option<AccountIdOf<T>>,
-		dest_iban: Option<IbanOf<T>>, 
+		dest_iban: IbanOf<T>, 
 		amount: BalanceOf<T>
 	) -> Result<(), &'static str> {
 		let remote_url = ApiUrl::<T>::get();
@@ -787,10 +797,10 @@ impl<T: Config> Pallet<T> {
 		let reference = format!("{}", request_id);
 
 		// Send request to remote endpoint
-		let body = impls::utils::unpeg_request::<T>(
+		let body = unpeg_request::<T>(
 			&format!("{:?}", burner.unwrap_or(Self::account_id())),
 			amount_u128,
-			&dest_iban.unwrap_or_default(),
+			&dest_iban,
 			&reference
 		)
 		.serialize();
@@ -831,7 +841,7 @@ impl<T: Config> Pallet<T> {
 		
 			// Process burn requests that are either not processed yet or failed
 			let dest_account = Self::get_account_id(
-				&burn_request.dest_iban.unwrap_or_default()
+				&burn_request.dest_iban
 			);
 			
 			// send the unpeg request
@@ -854,7 +864,10 @@ impl<T: Config> Pallet<T> {
 
 		Ok(())
 	}
+}
 
+/// Functions related to the offchain worker communication 
+impl<T: Config> Pallet<T> {
 	/// Fetch json from the Ebics Service API
 	/// Return parsed json file
 	fn fetch_json<'a>(remote_url: &'a [u8]) -> Result<JsonValue, &str> {
@@ -926,9 +939,9 @@ impl<T: Config> Pallet<T> {
 		Ok(())
 	}
 
-	/// parse bank statement
+	/// Parse bank statements
 	///
-	/// returns:
+	/// Returns:
 	/// 
 	/// * `statements` - vector of statements
 	/// 	`iban_account: IbanAccount` - IBAN account that owns the statement
@@ -941,29 +954,24 @@ impl<T: Config> Pallet<T> {
 
 		let raw_array = json.as_array();
 
-		let statements = match raw_array {
-			Some(v) => {
-				let mut balances: Vec<(BankAccountOf<T>, Vec<TransactionOf<T>>)> = Vec::with_capacity(v.len());
-				for val in v.iter() {
-					// extract iban account
-					let iban_account = match BankAccountOf::<T>::from_json_value(&val) {
-						Some(account) => account,
-						None => Default::default(),
-					};
-
+		if let Some(v) = raw_array {
+			let mut balances: Vec<(BankAccountOf<T>, Vec<TransactionOf<T>>)> = Vec::with_capacity(v.len());
+			for val in v.iter() {
+				// extract iban account
+				if let Ok(bank_account) = BankAccountOf::<T>::try_from(val) {
 					// extract transactions
 					let mut transactions = TransactionOf::<T>::parse_transactions(&val, TransactionType::Outgoing).unwrap_or_default();
 					let mut incoming_transactions = TransactionOf::<T>::parse_transactions(&val, TransactionType::Incoming).unwrap_or_default();
 					
 					transactions.append(&mut incoming_transactions);
 					
-					balances.push((iban_account, transactions));
+					balances.push((bank_account, transactions));
 				}
-				balances
-			},
-			None => Default::default(),
-		};
-		statements
+			}
+			balances
+		} else {
+			Vec::new()
+		}
 	}
 
 	fn validate_tx_parameters(

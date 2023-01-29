@@ -60,46 +60,25 @@ impl Deserialize<u128> for u128 {
 
 /// Functions of `Transaction<T>` type
 impl<MaxIbanLength: Get<u32>, MaxStringLength: Get<u32>> Transaction<MaxIbanLength, MaxStringLength> {
-    pub fn new(
-        iban: Iban<MaxIbanLength>,
-        name: BoundedVec<u8, MaxStringLength>,
-        currency: BoundedVec<u8, MaxStringLength>,
-        amount: u128,
-        reference: BoundedVec<u8, MaxStringLength>,
-        tx_type: TransactionType
-    ) -> Self {
-        Self {
-            iban,
-            name,
-            currency,
-            amount,
-            reference,
-            tx_type
-        }
-    }
-
 	// Get single transaction instance from json
 	pub fn from_json_statement(json: &JsonValue, tx_type: &TransactionType) -> Option<Self> {
-		let raw_object = json.as_object();
-        
-        match raw_object {
-            Some(obj) => {
-                let iban = extract_value::<Vec<u8>>("iban", obj).try_into().expect("Invalid IBAN");
-                let name = extract_value::<Vec<u8>>("name", obj).try_into().expect("Invalid name");
-                let currency = extract_value::<Vec<u8>>("currency", obj).try_into().expect("Invalid currency");
-                let amount = extract_value::<u128>("amount", obj);
-                let reference = extract_value::<Vec<u8>>("reference", obj).try_into().expect("Invalid reference");
+        if let Some(obj) = json.as_object() {
+            let iban = extract_value::<Vec<u8>>("iban", obj).try_into().expect("Invalid IBAN");
+            let name = extract_value::<Vec<u8>>("name", obj).try_into().expect("Invalid name");
+            let currency = extract_value::<Vec<u8>>("currency", obj).try_into().expect("Invalid currency");
+            let amount = extract_value::<u128>("amount", obj);
+            let reference = extract_value::<Vec<u8>>("reference", obj).try_into().expect("Invalid reference");
 
-                Some(Self::new(
-                    iban,
-                    name,
-                    currency,
-                    amount,
-                    reference,
-                    *tx_type
-                ))
-            },
-            _ => None,
+            Some(Self {
+                iban,
+                name,
+                currency,
+                amount,
+                reference,
+                tx_type: *tx_type
+            })
+        } else {
+            None
         }
 	}
 	
@@ -113,7 +92,7 @@ impl<MaxIbanLength: Get<u32>, MaxStringLength: Get<u32>> Transaction<MaxIbanLeng
         };
 
         let mut transactions = Vec::new();
-        
+
 		match json {
 			JsonValue::Object(obj) => {
                 match parse_object(key_string, &obj) {
@@ -134,171 +113,34 @@ impl<MaxIbanLength: Get<u32>, MaxStringLength: Get<u32>> Transaction<MaxIbanLeng
 	}
 }
 
-/// Functions of `BankAccount` type
-impl<MaxLength: Get<u32>> BankAccount<MaxLength> {
-    pub fn new (
-        iban: Iban<MaxLength>,
-        balance: u128,
-        last_updated: u64,
-        behaviour: AccountBehaviour<MaxLength>,
-    ) -> Self {
-        Self {
-            iban,
-            balance,
-            last_updated,
-            behaviour,
-        }
-    }
-	
-	pub fn from_json_value(json: &JsonValue) -> Option<Self> {
-        let raw_object = json.as_object();
-		let iban_account = match raw_object {
-			Some(obj) => {
-				let iban = extract_value::<Vec<u8>>("iban", obj).try_into().unwrap_or_default();
-				let balance = extract_value::<u128>("balanceCL", obj);
-
-				Self::new(
-					iban,
-					balance,
-					0,
-                    AccountBehaviour::default()
-                )
-			},
-			_ => return None,
-		};
-		Some(iban_account)
+impl<MaxLength: Get<u32>> From<&Iban<MaxLength>> for BankAccount<MaxLength> {
+	fn from(iban: &Iban<MaxLength>) -> Self {
+		Self {
+			iban: iban.clone(),
+			balance: 0,
+			last_updated: 0,
+			behaviour: AccountBehaviour::Keep,
+		}
 	}
 }
 
-/// Utility functions
-pub mod utils {
-    use lite_json::{JsonValue, NumberValue};
-    use crate::Config;
-    use crate::types::{Deserialize, IbanOf};
+impl<MaxLength: Get<u32>> TryFrom<&JsonValue> for BankAccount<MaxLength> {
+    type Error = ();
 
-    /// Utility function for parsing value from json object
-    pub fn parse_object(key: &str, obj: &[(Vec<char>, lite_json::JsonValue)]) -> JsonValue {
-        let raw_object = obj.into_iter().find(|(k, _)| k.iter().copied().eq(key.chars()));
-        if let Some((_, v)) = raw_object {
-            return v.clone();
+    fn try_from(json: &JsonValue) -> Result<Self, Self::Error> {
+        let raw_object = json.as_object();
+        if let Some(obj) = raw_object {
+            let iban = extract_value::<Vec<u8>>("iban", obj).try_into().unwrap_or_default();
+            let balance = extract_value::<u128>("balanceCL", obj);
+
+            Ok(Self {
+                iban,
+                balance,
+                last_updated: 0,
+                behaviour: AccountBehaviour::Keep
+            })
+        } else {
+            Err(())
         }
-        JsonValue::Null
-    }
-
-    /// Utility function for extracting value from json object
-    ///
-    /// parse value of a given key from json object
-    pub fn extract_value<T: Deserialize<T> + Default>(key: &str, obj: &[(Vec<char>, lite_json::JsonValue)]) -> T {
-        let (_, v) = obj.into_iter().find(|(k, _)| k.iter().copied().eq(key.chars())).unwrap();
-        if let Some(value) = T::deserialize(v) {
-            return value;
-        }
-        Default::default()
-    }
-
-    /// Unpeq request template
-    /// 
-    /// # Arguments
-    /// 
-    /// `account_id` - Sender of the unpeq request
-    /// `amount` - Amount of the unpeq request
-    /// `iban` - IBAN of the receiver
-    /// `reference` - Reference of the unpeq request, we save request id in this field
-    pub fn unpeg_request<T: Config>(
-        dest: &str, 
-        amount: u128, 
-        iban: &IbanOf<T>,
-        reference: &str,
-    ) -> JsonValue {
-
-        // First step is to convert amount to NumberValue type
-        let integer = amount / 1_000_000_0000;
-        let fraction = amount % 1_000_000_0000;
-
-        // Mutable copy of `fraction` that will be used to calculate length of the fraction
-        let mut fraction_copy = fraction.clone();
-
-        let fraction_length = {
-            let mut len = 0;
-            
-            while fraction_copy > 0 {
-                fraction_copy /= 10;
-                len += 1;
-            }
-            len
-        };
-
-        let amount_json = JsonValue::Number(NumberValue {
-            integer: integer as u64,
-            fraction: fraction as u64,
-            fraction_length,
-            exponent: 0,
-            negative: false,
-        });
-
-        let iban_json = JsonValue::String(
-            iban[..].iter().map(|b| *b as char).collect::<Vec<char>>()
-        );
-
-        JsonValue::Object(
-            vec![
-                (
-                    "amount".chars().into_iter().collect(), 
-                    amount_json
-                ),
-                (
-                    "clearingSystemMemberId".chars().into_iter().collect(),
-                    JsonValue::String(vec!['H', 'Y', 'P', 'L', 'C', 'H', '2', '2'])
-                ),
-                (
-                    "currency".chars().into_iter().collect(), 
-                    JsonValue::String(vec!['E', 'U', 'R'])
-                ),
-                (
-                    "nationalPayment".chars().into_iter().collect(),
-                    JsonValue::Boolean(true)
-                ),
-                (
-                    "ourReference".chars().into_iter().collect(), 
-                    JsonValue::String(reference.chars().into_iter().collect())
-                ),
-                (
-                    "purpose".chars().into_iter().collect(), 
-                    JsonValue::String(dest.chars().into_iter().collect())
-                ),
-                (
-                    "receipientBankName".chars().into_iter().collect(),
-                    JsonValue::String(vec!['H', 'y', 'p'])
-                ),
-                (
-                    "receipientCity".chars().into_iter().collect(),
-                    JsonValue::String(vec!['e'])
-                ),
-                (
-                    "receipientCountry".chars().into_iter().collect(),
-                    JsonValue::String(vec!['C', 'H'])
-                ),
-                (
-                    "receipientName".chars().into_iter().collect(),
-                    JsonValue::String(vec!['e'])
-                ),
-                (
-                    "receipientIban".chars().into_iter().collect(),
-                    iban_json
-                ),
-                (
-                    "receipientStreet".chars().into_iter().collect(),
-                    JsonValue::String(vec!['e'])
-                ),
-                (
-                    "receipientStreetNr".chars().into_iter().collect(),
-                    JsonValue::String(vec!['2', '5'])
-                ),
-                (
-                    "receipientZip".chars().into_iter().collect(),
-                    JsonValue::String(vec!['6', '3', '4', '0'])
-                )
-            ]
-        )
     }
 }

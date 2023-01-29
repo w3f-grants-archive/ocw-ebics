@@ -15,7 +15,7 @@ use lite_json::Serialize;
 use crate::{types::{
 	Transaction, BankAccount,
 	TransactionType, IbanOf
-}, helpers::string_to_bounded_vec, impls::utils::unpeg_request};
+}, helpers::string_to_bounded_vec, utils::*};
 use crate::helpers::{
 	ResponseTypes, StatementTypes,
 	get_mock_response, 

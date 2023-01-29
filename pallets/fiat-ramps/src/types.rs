@@ -131,17 +131,6 @@ pub struct BankAccount<MaxLength: Get<u32>> {
 	pub behaviour: AccountBehaviour<MaxLength>,
 }
 
-impl<MaxLength: Get<u32>> From<Iban<MaxLength>> for BankAccount<MaxLength> {
-	fn from(iban: Iban<MaxLength>) -> Self {
-		Self {
-			iban,
-			balance: 0,
-			last_updated: 0,
-			behaviour: AccountBehaviour::Keep,
-		}
-	}
-}
-
 /// Burn destination
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 pub enum TransferDestination<MaxLength: Get<u32>, AccountId> {
