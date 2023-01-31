@@ -129,7 +129,7 @@ pub(crate) fn get_mock_response<T: Config>(
 				StatementTypes::CompleteTransactions => {
 					let bytes = br#"[
 						{
-							"iban": "CH1230116000289537313",
+							"iban": "CH2108307000289537313",
 							"balanceCL": 10000000,
 							"incomingTransactions": [
 								{
@@ -185,7 +185,7 @@ pub(crate) fn get_mock_response<T: Config>(
 				StatementTypes::InvalidTransactions => {
 					let bytes = br#"[
 						{
-							"iban": "CH1230116000289537313",
+							"iban": "CH2108307000289537313",
 							"balanceCL": 10000000,
 							"incomingTransactions": [
 								{
@@ -226,7 +226,7 @@ pub(crate) fn get_mock_response<T: Config>(
 		ResponseTypes::MultipleStatements => {
 			let bytes = br#"[
 				{
-					"iban": "CH1230116000289537313",
+					"iban": "CH2108307000289537313",
 					"balanceCL": 10000000,
 					"incomingTransactions": [
 						{
@@ -261,7 +261,7 @@ pub(crate) fn get_mock_response<T: Config>(
 					],
 					"outgoingTransactions": [
 						{
-							"iban": "CH1230116000289537313",
+							"iban": "CH2108307000289537313",
 							"name": "Charlie",
 							"currency": "EUR",
 							"amount": 15000,
