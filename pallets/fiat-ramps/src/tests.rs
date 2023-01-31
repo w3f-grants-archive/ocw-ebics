@@ -1,104 +1,108 @@
 use codec::Decode;
-use frame_support::{
-	assert_ok, assert_err, 
-};
-use std::sync::Arc;
-use sp_core::{
-    offchain::{testing, OffchainWorkerExt, TransactionPoolExt},
-};
-use sp_keystore::{SyncCryptoStore, KeystoreExt};
-use sp_runtime::{ 
-	RuntimeAppPublic, DispatchError, 
-};
+use frame_support::{assert_err, assert_noop, assert_ok};
 use lite_json::Serialize;
+use sp_core::offchain::{testing, OffchainWorkerExt, TransactionPoolExt};
+use sp_keystore::{KeystoreExt, SyncCryptoStore};
+use sp_runtime::{DispatchError, RuntimeAppPublic};
+use std::sync::Arc;
 
-use crate::{types::{
-	Transaction, BankAccount,
-	TransactionType, IbanOf
-}, helpers::string_to_bounded_vec, utils::*};
-use crate::helpers::{
-	ResponseTypes, StatementTypes,
-	get_mock_response, 
+use crate::helpers::{get_mock_response, ResponseTypes, StatementTypes};
+use crate::types::{AccountBehaviour, BankAccountOf, TransactionOf, TransferDestination};
+use crate::{
+	helpers::string_to_bounded_vec,
+	types::{IbanOf, Transaction, TransactionType},
+	utils::*,
 };
-use sp_std::convert::TryInto;
 
 use crate::mock::*;
 
-fn test_processing(
-    statement_type: StatementTypes,
-    response_type: ResponseTypes,
-) {
-    let (offchain, state) = testing::TestOffchainExt::new();
-    let (pool, pool_state) = testing::TestTransactionPoolExt::new();
-    let keystore = sp_keystore::testing::KeyStore::new();
+fn test_processing(statement_type: StatementTypes, response_type: ResponseTypes) {
+	let (offchain, state) = testing::TestOffchainExt::new();
+	let (pool, pool_state) = testing::TestTransactionPoolExt::new();
+	let keystore = sp_keystore::testing::KeyStore::new();
 
-    SyncCryptoStore::sr25519_generate_new(
-        &keystore,
-        crate::crypto::Public::ID,
-        Some(&format!("{}/alice", "cup swing hill dinner pioneer mom stick steel sad raven oak practice")),
-    ).unwrap();
+	SyncCryptoStore::sr25519_generate_new(
+		&keystore,
+		crate::crypto::Public::ID,
+		Some(&format!(
+			"{}/alice",
+			"cup swing hill dinner pioneer mom stick steel sad raven oak practice"
+		)),
+	)
+	.unwrap();
 
-    let mut t = new_test_ext(); 
+	let mut t = new_test_ext();
 
 	t.register_extension(OffchainWorkerExt::new(offchain));
-    t.register_extension(TransactionPoolExt::new(pool));
-    t.register_extension(KeystoreExt(Arc::new(keystore)));
+	t.register_extension(TransactionPoolExt::new(pool));
+	t.register_extension(KeystoreExt(Arc::new(keystore)));
 
-	let (response_bytes, parsed_response) = get_mock_response(
-		response_type.clone(), 
-		statement_type.clone()
-	);
+	let (response_bytes, parsed_response) =
+		get_mock_response::<Test>(response_type.clone(), statement_type.clone());
 
 	let statements_endpoint = "http://w.e36.io:8093/ebics/api-v1/bankstatements".to_string();
 
-	ebics_server_response(&mut state.write(),
+	ebics_server_response(
+		&mut state.write(),
 		testing::PendingRequest {
 			method: "GET".to_string(),
 			uri: statements_endpoint,
 			response: Some(response_bytes),
 			sent: true,
 			..Default::default()
-		}
+		},
 	);
 
 	t.execute_with(|| {
-		let _res = FiatRampsExample::fetch_transactions_and_send_signed();
+		match response_type {
+			ResponseTypes::Empty => {
+				let _res = FiatRampsExample::fetch_transactions_and_send_signed();
+				// No transactions should be sent for empty statement
+				assert!(pool_state.read().transactions.is_empty());
+			},
+			ResponseTypes::SingleStatement | ResponseTypes::MultipleStatements => {
+				match statement_type {
+					StatementTypes::InvalidTransactions => {
+						assert_noop!(
+							FiatRampsExample::fetch_transactions_and_send_signed(),
+							"Error in parsing json"
+						);
+					},
+					_ => {
+						assert_ok!(FiatRampsExample::fetch_transactions_and_send_signed());
+						let tx = pool_state.write().transactions.pop().unwrap();
 
-        match response_type {
-            ResponseTypes::Empty => {
-                // No transactions should be sent for empty statement
-                assert!(pool_state.read().transactions.is_empty());
-            },
-            ResponseTypes::SingleStatement | ResponseTypes::MultipleStatements => {
-                let tx = pool_state.write().transactions.pop().unwrap();
+						assert!(pool_state.read().transactions.is_empty());
 
-                assert!(pool_state.read().transactions.is_empty());
+						let tx = Extrinsic::decode(&mut &*tx).unwrap();
+						assert_eq!(tx.signature.unwrap().0, 0);
 
-                let tx = Extrinsic::decode(&mut &*tx).unwrap();
-                assert_eq!(tx.signature.unwrap().0, 0);
-
-                assert_eq!(tx.call, crate::Call::FiatRampsExample(crate::Call::process_statements {
-                    statements: parsed_response.clone(),
-                }));
-            }
-        }
+						assert_eq!(
+							tx.call,
+							crate::Call::process_statements { statements: parsed_response.clone() }
+								.into()
+						);
+					},
+				}
+			},
+		}
 	})
 }
 
 #[test]
 fn should_fail_to_update_api_url_non_sudo() {
-	let mut t = new_test_ext(); 
+	let mut t = new_test_ext();
 	let test_accounts = get_test_accounts();
-	
+
 	// Alice is a sudo account
 	let bob = test_accounts[1].clone();
 	let charlie = test_accounts[2].clone();
 
-	let invalid_url: [u8; 33] = "http://127.0.0.1:8081/ebics/ap-v2".as_bytes().try_into().expect("Failed to convert string to bytes");
+	let invalid_url = string_to_bounded_vec("http://127.0.0.1:8081/ebics/ap-v2");
 
 	t.execute_with(|| {
 		assert_err!(
-			FiatRampsExample::set_api_url(Some(bob).into(), invalid_url),
+			FiatRampsExample::set_api_url(Some(bob).into(), invalid_url.clone()),
 			DispatchError::BadOrigin
 		);
 
@@ -112,98 +116,84 @@ fn should_fail_to_update_api_url_non_sudo() {
 #[test]
 fn should_make_http_call_and_parse() {
 	let (offchain, state) = testing::TestOffchainExt::new();
-	let mut t = new_test_ext(); 
+	let mut t = new_test_ext();
 
 	t.register_extension(OffchainWorkerExt::new(offchain));
 
-	let (response_bytes, parsed_response) = get_mock_response(
-		ResponseTypes::SingleStatement, 
-		StatementTypes::IncomingTransactions
+	let (response_bytes, parsed_response) = get_mock_response::<Test>(
+		ResponseTypes::SingleStatement,
+		StatementTypes::IncomingTransactions,
 	);
 
 	let statements_endpoint = "http://w.e36.io:8093/ebics/api-v1/bankstatements".to_string();
 
-	ebics_server_response(&mut state.write(),
+	ebics_server_response(
+		&mut state.write(),
 		testing::PendingRequest {
 			method: "GET".to_string(),
 			uri: statements_endpoint.clone(),
 			response: Some(response_bytes.clone()),
 			sent: true,
 			..Default::default()
-		}
+		},
 	);
 
 	t.execute_with(|| {
-		let response = FiatRampsExample::fetch_json("http://w.e36.io:8093/ebics/api-v1".as_bytes()).unwrap();
+		let response = FiatRampsExample::fetch_json().unwrap();
 		let raw_array = response.as_array();
-		
-		let statements = match raw_array {
-			Some(v) => {
-				let mut balances: Vec<(BankAccount, Vec<Transaction>)> = Vec::with_capacity(v.len());
-				for val in v.iter() {
-					// extract iban account
-					let iban_account = match BankAccount::from_json_value(&val) {
-						Some(account) => account,
-						None => Default::default(),
-					};
 
-					// extract transactions
-					let mut transactions = Transaction::parse_transactions(&val, TransactionType::Outgoing).unwrap_or_default();
-					let mut incoming_transactions = Transaction::parse_transactions(&val, TransactionType::Incoming).unwrap_or_default();
-					
+		if let Some(v) = raw_array {
+			let mut balances: Vec<(BankAccountOf<Test>, Vec<TransactionOf<Test>>)> =
+				Vec::with_capacity(v.len());
+			for val in v.iter() {
+				if let Ok(bank_account) = BankAccountOf::<Test>::try_from(val) {
+					let mut transactions =
+						Transaction::parse_transactions(&val, TransactionType::Outgoing)
+							.unwrap_or_default();
+					let mut incoming_transactions =
+						Transaction::parse_transactions(&val, TransactionType::Incoming)
+							.unwrap_or_default();
+
 					transactions.append(&mut incoming_transactions);
-					
-					balances.push((iban_account, transactions));
+					balances.push((bank_account, transactions));
 				}
-				balances
-			},
-			None => Default::default(),
-		};
+			}
 
-		assert_eq!(statements.len(), 1);
-		assert_eq!(statements[0].0, parsed_response[0].0);
-		assert_eq!(statements[0].1, parsed_response[0].1);
+			assert_eq!(balances.len(), 1);
+			assert_eq!(balances[0].0, parsed_response[0].0);
+			assert_eq!(balances[0].1, parsed_response[0].1);
+		}
 	})
 }
 
 #[test]
 fn test_process_empty_statement() {
-    test_processing(
-        StatementTypes::IncomingTransactions,
-        ResponseTypes::Empty,
-    )
+	test_processing(StatementTypes::Empty, ResponseTypes::Empty)
 }
 
 #[test]
 fn test_process_incoming_transactions() {
-    test_processing(
-        StatementTypes::IncomingTransactions,
-        ResponseTypes::SingleStatement,
-    )
+	test_processing(StatementTypes::IncomingTransactions, ResponseTypes::SingleStatement)
 }
 
 #[test]
 fn test_process_outgoing_transactions() {
-    test_processing(
-        StatementTypes::OutgoingTransactions,
-        ResponseTypes::SingleStatement,
-    )
+	test_processing(StatementTypes::OutgoingTransactions, ResponseTypes::SingleStatement)
 }
 
 #[test]
 fn test_process_multiple_statements() {
-    test_processing(
-        StatementTypes::IncomingTransactions,
-        ResponseTypes::MultipleStatements,
-    )
+	test_processing(StatementTypes::CompleteTransactions, ResponseTypes::MultipleStatements)
 }
 
 #[test]
 fn test_process_multiple_statements_outgoing() {
-    test_processing(
-        StatementTypes::OutgoingTransactions,
-        ResponseTypes::MultipleStatements,
-    )
+	test_processing(StatementTypes::OutgoingTransactions, ResponseTypes::MultipleStatements)
+}
+
+#[test]
+fn test_process_invalid_transactions() {
+	test_processing(StatementTypes::InvalidTransactions, ResponseTypes::SingleStatement)
 }
 
 #[test]
@@ -211,7 +201,7 @@ fn test_iban_mapping() {
 	let mut t = new_test_ext();
 
 	let test_accounts = get_test_accounts();
-	
+
 	let alice = test_accounts[0].clone();
 	let bob = test_accounts[1].clone();
 	let charlie = test_accounts[2].clone();
@@ -221,18 +211,21 @@ fn test_iban_mapping() {
 	let charlie_iban: IbanOf<Test> = string_to_bounded_vec("CH1230116000289537313");
 
 	t.execute_with(|| {
-		assert_ok!(FiatRampsExample::map_iban_account(
+		assert_ok!(FiatRampsExample::create_account(
 			Some(alice.clone()).into(),
 			alice_iban.clone(),
+			AccountBehaviour::Keep,
 		));
-		assert_ok!(FiatRampsExample::map_iban_account(
+		assert_ok!(FiatRampsExample::create_account(
 			Some(bob.clone()).into(),
-			bob_iban.clone()
+			bob_iban.clone(),
+			AccountBehaviour::Keep
 		));
 
-		assert_ok!(FiatRampsExample::map_iban_account(
+		assert_ok!(FiatRampsExample::create_account(
 			Some(charlie.clone()).into(),
 			charlie_iban.clone(),
+			AccountBehaviour::Keep
 		));
 
 		assert_eq!(FiatRampsExample::get_account_id(&alice_iban).unwrap(), alice.clone());
@@ -245,30 +238,31 @@ fn test_iban_mapping() {
 			alice_iban.clone()
 		));
 		// Should be mapped to None
-		assert_eq!(
-			FiatRampsExample::get_account_id(&alice_iban), 
-			None
-		);
+		assert_eq!(FiatRampsExample::get_account_id(&alice_iban), None);
 	})
 }
 
 #[test]
 fn test_burn_request() {
-    let (offchain, state) = testing::TestOffchainExt::new();
-    let (pool, _pool_state) = testing::TestTransactionPoolExt::new();
-    let keystore = sp_keystore::testing::KeyStore::new();
+	let (offchain, state) = testing::TestOffchainExt::new();
+	let (pool, _pool_state) = testing::TestTransactionPoolExt::new();
+	let keystore = sp_keystore::testing::KeyStore::new();
 
 	SyncCryptoStore::sr25519_generate_new(
-        &keystore,
-        crate::crypto::Public::ID,
-        Some(&format!("{}/alice", "cup swing hill dinner pioneer mom stick steel sad raven oak practice")),
-    ).unwrap();
+		&keystore,
+		crate::crypto::Public::ID,
+		Some(&format!(
+			"{}/alice",
+			"cup swing hill dinner pioneer mom stick steel sad raven oak practice"
+		)),
+	)
+	.unwrap();
 
-    let mut t = new_test_ext(); 
+	let mut t = new_test_ext();
 
 	t.register_extension(OffchainWorkerExt::new(offchain));
-    t.register_extension(TransactionPoolExt::new(pool));
-    t.register_extension(KeystoreExt(Arc::new(keystore)));
+	t.register_extension(TransactionPoolExt::new(pool));
+	t.register_extension(KeystoreExt(Arc::new(keystore)));
 
 	let test_accounts = get_test_accounts();
 
@@ -281,74 +275,68 @@ fn test_burn_request() {
 	let charlie_iban: IbanOf<Test> = string_to_bounded_vec("CH1230116000289537313");
 
 	{
-		let mock_unpeg_request = unpeg_request(
-		&format!("{:?}", bob),
-			10000,
-			&bob_iban,
-			&"0".to_string(),
-		)
-		.serialize();
+		let mock_unpeg_request =
+			unpeg_request::<Test>(&format!("{:?}", bob), 10000, &bob_iban, &"0".to_string())
+				.serialize();
 
-		let mock_unpeg_request_1 = unpeg_request(
-		&format!("{:?}", charlie),
-			100,
-			&charlie_iban,
-			&"1".to_string(),
-		)
-		.serialize();
+		let mock_unpeg_request_1 =
+			unpeg_request::<Test>(&format!("{:?}", charlie), 100, &charlie_iban, &"1".to_string())
+				.serialize();
 
-		let mock_unpeg_request_2 = unpeg_request(
-		&format!("{:?}", charlie),
-			1000,
-			&charlie_iban,
-			&"2".to_string(),
-		)
-		.serialize();
-	
+		let mock_unpeg_request_2 =
+			unpeg_request::<Test>(&format!("{:?}", charlie), 1000, &charlie_iban, &"2".to_string())
+				.serialize();
+
 		let unpeg_endpoint = "http://w.e36.io:8093/ebics/api-v1/unpeg";
 
-		ebics_server_response(&mut state.write(),
+		ebics_server_response(
+			&mut state.write(),
 			testing::PendingRequest {
 				uri: unpeg_endpoint.to_string(),
 				method: "POST".to_string(),
 				body: mock_unpeg_request.clone(),
 				response: Some(mock_unpeg_request),
 				headers: [
-					("Content-Type".to_string(), "application/json".to_string()), 
-					("accept".to_string(), "*/*".to_string())
-				].to_vec(),
+					("Content-Type".to_string(), "application/json".to_string()),
+					("accept".to_string(), "*/*".to_string()),
+				]
+				.to_vec(),
 				sent: true,
 				..Default::default()
-			}
+			},
 		);
 
-		ebics_server_response(&mut state.write(),
+		ebics_server_response(
+			&mut state.write(),
 			testing::PendingRequest {
 				uri: unpeg_endpoint.to_string(),
 				method: "POST".to_string(),
 				body: mock_unpeg_request_1.clone(),
 				response: Some(mock_unpeg_request_1),
 				headers: [
-					("Content-Type".to_string(), "application/json".to_string()), 
-					("accept".to_string(), "*/*".to_string())
-				].to_vec(),
+					("Content-Type".to_string(), "application/json".to_string()),
+					("accept".to_string(), "*/*".to_string()),
+				]
+				.to_vec(),
 				sent: true,
 				..Default::default()
-			}
+			},
 		);
-		ebics_server_response(&mut state.write(),
+		ebics_server_response(
+			&mut state.write(),
 			testing::PendingRequest {
 				uri: unpeg_endpoint.to_string(),
 				method: "POST".to_string(),
 				body: mock_unpeg_request_2.clone(),
 				response: Some(mock_unpeg_request_2),
 				headers: [
-					("Content-Type".to_string(), "application/json".to_string()), 
-					("accept".to_string(), "*/*".to_string())
-				].to_vec(),
+					("Content-Type".to_string(), "application/json".to_string()),
+					("accept".to_string(), "*/*".to_string()),
+				]
+				.to_vec(),
 				sent: true,
 				..Default::default()
-			}
+			},
 		);
 	}
 
@@ -359,107 +347,95 @@ fn test_burn_request() {
 			request_counter: u64,
 			amount: u128,
 			burner: &AccountId,
-			_dest_account: Option<&AccountId>,
-			dest_iban: Option<&IbanOf<Test>>,
+			dest_iban: &IbanOf<Test>,
 		) {
 			// Check if burn request has been added to the queue
-			let burn_request = FiatRampsExample::burn_request(request_counter);
+			let maybe_burn_request = FiatRampsExample::burn_requests(request_counter);
+
+			assert!(maybe_burn_request.is_some());
+
+			let burn_request = maybe_burn_request.unwrap();
+
 			assert_eq!(burn_request.amount, amount);
 			assert_eq!(
-				FiatRampsExample::get_account_id(&burn_request.burner).unwrap(), 
+				FiatRampsExample::get_account_id(&burn_request.burner).unwrap(),
 				burner.clone()
 			);
-			assert_eq!(burn_request.dest_iban, Some(dest_iban.unwrap().clone()));
+			assert_eq!(burn_request.dest_iban, *dest_iban);
 
 			// Burn amount should be transfered to Pallet's account
 			// Pallet's accounts serves as the treasury of unpegged funds
 			// Once the burn request is confirmed as an outgoing transaction in the bank statement,
 			// We can tag the burn request as confirmed and send funds to the destination account
 			assert_eq!(
-				Balances::free_balance(FiatRampsExample::account_id()), 
+				Balances::free_balance(FiatRampsExample::account_id()),
 				initial_pallet_balance + amount
 			);
-			
-			// Trigger processing of burn requests	
+
+			// Trigger processing of burn requests
 			assert_ok!(FiatRampsExample::process_burn_requests());
 		}
 
 		// map Alice iban
-		assert_ok!(FiatRampsExample::map_iban_account(
+		assert_ok!(FiatRampsExample::create_account(
 			Some(alice.clone()).into(),
 			alice_iban.clone(),
+			AccountBehaviour::Keep,
 		));
 		// map Bob iban
-		assert_ok!(FiatRampsExample::map_iban_account(
+		assert_ok!(FiatRampsExample::create_account(
 			Some(bob.clone()).into(),
 			bob_iban.clone(),
+			AccountBehaviour::Keep
 		));
 
-		assert_ok!(FiatRampsExample::map_iban_account(
+		// map Charlie iban
+		assert_ok!(FiatRampsExample::create_account(
 			Some(charlie.clone()).into(),
 			charlie_iban.clone(),
+			AccountBehaviour::Keep,
 		));
 
 		// Pallet's balance before unpeg request
 		let initial_pallet_balance = Balances::free_balance(FiatRampsExample::account_id());
 		// call `burn_to_iban` to transfer 10000 from Alice to Bob
-		assert_ok!(FiatRampsExample::transfer_to_iban(
+		assert_ok!(FiatRampsExample::transfer(
 			Some(alice.clone()).into(),
 			10000,
-			bob_iban.clone(),
+			TransferDestination::Iban(bob_iban.clone())
 		));
 
-		check_burn_request(
-			initial_pallet_balance,
-			0,
-			10000,
-			&alice,
-			Some(&bob),
-			Some(&bob_iban),
-		);
+		check_burn_request(initial_pallet_balance, 0, 10000, &alice, &bob_iban);
 
 		// Pallet's balance before unpeg request
 		let initial_pallet_balance = Balances::free_balance(FiatRampsExample::account_id());
 		// make burn to address
-		assert_ok!(FiatRampsExample::transfer_to_address(
+		assert_ok!(FiatRampsExample::transfer(
 			Some(bob.clone()).into(),
 			100,
-			charlie.clone()
+			TransferDestination::Address(charlie.clone())
 		));
 
-		check_burn_request(
-			initial_pallet_balance,
-			1,
-			100,
-			&bob,
-			Some(&charlie),
-			Some(&charlie_iban),
-		);
+		check_burn_request(initial_pallet_balance, 1, 100, &bob, &charlie_iban);
 
 		// Pallet's balance before unpeg request
 		let initial_pallet_balance = Balances::free_balance(FiatRampsExample::account_id());
 
 		// Make a generic burn, similar to withdrawin money from the bank
-		assert_ok!(FiatRampsExample::burn(
+		assert_ok!(FiatRampsExample::transfer(
 			Some(charlie.clone()).into(),
 			1000,
+			TransferDestination::Withdraw
 		));
 
-		check_burn_request(
-			initial_pallet_balance,
-			2,
-			1000,
-			&charlie,
-			Some(&charlie),
-			Some(&charlie_iban),
-		);
+		check_burn_request(initial_pallet_balance, 2, 1000, &charlie, &charlie_iban);
 	})
 }
 
 /// Mock server response
 fn ebics_server_response(
 	state: &mut testing::OffchainState,
-	pending_request: testing::PendingRequest
+	pending_request: testing::PendingRequest,
 ) {
 	state.expect_request(pending_request);
 }

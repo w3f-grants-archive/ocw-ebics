@@ -1,7 +1,7 @@
 use sp_std::convert::TryInto;
 
-use sp_std::{vec, vec::Vec};
 use crate::*;
+use sp_std::{vec, vec::Vec};
 
 /// Server response types
 #[derive(Clone, Debug, PartialEq)]
@@ -25,35 +25,44 @@ pub(crate) enum StatementTypes {
 	OutgoingTransactions,
 	/// Bank statement has `incomingTransactions` and `outgoingTransactions` fields populated
 	CompleteTransactions,
-	///
+	/// Invalid transactions
 	InvalidTransactions,
 }
 
 /// Convert string to `BoundedVec<u8, T::StringLimit>`
 pub(crate) fn string_to_bounded_vec<S: Get<u32>>(string: &str) -> BoundedVec<u8, S> {
-	return string.as_bytes().to_vec().try_into().unwrap_or_default();
+	return string.as_bytes().to_vec().try_into().expect("Do not pass more than 255 bytes");
 }
 
 /// Get mock server response
-/// 
+///
 /// Return a tuple of (response bytes, response parsed to statement)
 pub(crate) fn get_mock_response<T: Config>(
 	response: ResponseTypes,
 	statement: StatementTypes,
 ) -> (Vec<u8>, Vec<(BankAccountOf<T>, Vec<TransactionOf<T>>)>) {
-	let alice_iban: IbanOf<T> = b"CH2108307000289537320".to_vec().try_into().expect("Failed to convert string to bytes");
-	let bob_iban: IbanOf<T> = b"CH1230116000289537312".to_vec().try_into().expect("Failed to convert string to bytes");
-	let charlie_iban: IbanOf<T> = b"CH1230116000289537313".to_vec().try_into().expect("Failed to convert string to bytes");
+	let alice_iban: IbanOf<T> = b"CH2108307000289537320"
+		.to_vec()
+		.try_into()
+		.expect("Failed to convert string to bytes");
+	let bob_iban: IbanOf<T> = b"CH1230116000289537312"
+		.to_vec()
+		.try_into()
+		.expect("Failed to convert string to bytes");
+	let charlie_iban: IbanOf<T> = b"CH1230116000289537313"
+		.to_vec()
+		.try_into()
+		.expect("Failed to convert string to bytes");
 
 	match response {
 		ResponseTypes::Empty => {
 			return (br#"[]"#.to_vec(), vec![]);
-		}
+		},
 		ResponseTypes::SingleStatement => {
 			match statement {
 				StatementTypes::Empty => {
 					return (br#"[]"#.to_vec(), vec![]);
-				}
+				},
 				StatementTypes::IncomingTransactions => {
 					// the transaction is coming from Bob to Alice
 					let bytes = br#"[{"iban":"CH2108307000289537320","balanceCL":449.00,"incomingTransactions":[{"iban":"CH1230116000289537312","name":"Bob","currency":"EUR","amount":100.00,"reference":"Purp:5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY; ourRef:none"}],"outgoingTransactions":[]}]"#.to_vec();
@@ -76,7 +85,7 @@ pub(crate) fn get_mock_response<T: Config>(
 						]
 					)];
 					return (bytes, parsed_statements);
-				}
+				},
 				StatementTypes::OutgoingTransactions => {
 					// outgoing transaction is from Bob to Alice
 					let bytes = br#"[{
@@ -93,7 +102,8 @@ pub(crate) fn get_mock_response<T: Config>(
 								}
 							]
 						}
-					]"#.to_vec();
+					]"#
+					.to_vec();
 					let parsed_statements = vec![
 						(
 							BankAccount {
@@ -115,7 +125,7 @@ pub(crate) fn get_mock_response<T: Config>(
 						)
 					];
 					return (bytes, parsed_statements);
-				}
+				},
 				StatementTypes::CompleteTransactions => {
 					let bytes = br#"[
 						{
@@ -140,7 +150,8 @@ pub(crate) fn get_mock_response<T: Config>(
 								}
 							]
 						}	
-					]"#.to_vec();
+					]"#
+					.to_vec();
 					let parsed_statements = vec![
 						(
 							BankAccount {
@@ -186,29 +197,30 @@ pub(crate) fn get_mock_response<T: Config>(
 								}
 							],
 						}
-					]"#.to_vec();
-					let parsed_statements = vec![
-						(
-							BankAccount {
-								iban: charlie_iban.clone(),
-								balance: 100000000000000000,
-								last_updated: 0,
-								behaviour: AccountBehaviour::Keep,
-							},
-							vec![
-								Transaction{
-									iban: string_to_bounded_vec::<T::MaxIbanLength>("0000000000000000000000000000"),
-									name: string_to_bounded_vec::<T::MaxStringLength>("Alice"),
-									amount: 150000000000000,
-									reference: string_to_bounded_vec::<T::MaxStringLength>("Purp:None; ourRef: none"),
-									currency: string_to_bounded_vec::<T::MaxStringLength>("EUR"),
-									tx_type: TransactionType::Incoming,
-								}
-							]
-						)
-					];
+					]"#
+					.to_vec();
+					let parsed_statements = vec![(
+						BankAccount {
+							iban: charlie_iban.clone(),
+							balance: 100000000000000000,
+							last_updated: 0,
+							behaviour: AccountBehaviour::Keep,
+						},
+						vec![Transaction {
+							iban: string_to_bounded_vec::<T::MaxIbanLength>(
+								"0000000000000000000000000000",
+							),
+							name: string_to_bounded_vec::<T::MaxStringLength>("Alice"),
+							amount: 150000000000000,
+							reference: string_to_bounded_vec::<T::MaxStringLength>(
+								"Purp:None; ourRef: none",
+							),
+							currency: string_to_bounded_vec::<T::MaxStringLength>("EUR"),
+							tx_type: TransactionType::Incoming,
+						}],
+					)];
 					return (bytes, parsed_statements);
-				}
+				},
 			}
 		},
 		ResponseTypes::MultipleStatements => {
@@ -286,9 +298,10 @@ pub(crate) fn get_mock_response<T: Config>(
 						}
 					]
 				}
-			]"#.to_vec();
+			]"#
+			.to_vec();
 
-            let parsed_statements = vec![
+			let parsed_statements = vec![
                 (
                     BankAccount {
                         iban: charlie_iban.clone(),
@@ -376,7 +389,7 @@ pub(crate) fn get_mock_response<T: Config>(
                     ]
                 )
             ];
-            return (bytes, parsed_statements);
-		}
+			return (bytes, parsed_statements);
+		},
 	}
 }

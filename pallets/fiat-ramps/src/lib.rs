@@ -21,6 +21,7 @@ use frame_system::{
 	pallet_prelude::*,
 };
 use lite_json::{json::JsonValue, parse_json, Serialize};
+use sp_core::hexdisplay::AsBytesRef;
 use sp_runtime::DispatchError;
 use sp_runtime::{
 	offchain as rt_offchain,
@@ -362,6 +363,12 @@ pub mod pallet {
 		},
 		/// Transfer event with IBAN numbers
 		Transfer { from: IbanOf<T>, to: IbanOf<T>, amount: BalanceOf<T> },
+		/// Statement processed
+		StatementProcessed {
+			holder: AccountIdOf<T>,
+			iban: IbanOf<T>,
+			failed_transactions: Vec<u32>,
+		},
 	}
 
 	#[pallet::error]
@@ -724,6 +731,12 @@ impl<T: Config> Pallet<T> {
 			}
 		}
 
+		Self::deposit_event(Event::StatementProcessed {
+			holder: statement_owner,
+			iban: iban_account.iban.clone(),
+			failed_transactions,
+		});
+
 		Ok(())
 	}
 
@@ -823,13 +836,14 @@ impl<T: Config> Pallet<T> {
 impl<T: Config> Pallet<T> {
 	/// Fetch json from the Ebics Service API
 	/// Return parsed json file
-	fn fetch_json<'a>(remote_url: &'a [u8]) -> Result<JsonValue, &str> {
-		let remote_url_str = core::str::from_utf8(remote_url)
+	fn fetch_json() -> Result<JsonValue, &'static str> {
+		// fetch json value
+		let remote_url = ApiUrl::<T>::get();
+		let remote_url_str = core::str::from_utf8(&remote_url.as_bytes_ref())
 			.map_err(|_| "Error in converting remote_url to string")?;
 
-		let remote_url = format!("{}/bankstatements", remote_url_str);
-
-		let pending = rt_offchain::http::Request::get(&remote_url)
+		let final_url = format!("{}/bankstatements", remote_url_str);
+		let pending = rt_offchain::http::Request::get(&final_url)
 			.send()
 			.map_err(|_| "Error in sending http GET request")?;
 
@@ -849,7 +863,7 @@ impl<T: Config> Pallet<T> {
 
 		log::info!("[OCW] JSON received: {}", json_str);
 
-		let json_val = parse_json(json_str).expect(json_str);
+		let json_val = parse_json(json_str).map_err(|_| "Error in parsing json")?;
 
 		Ok(json_val)
 	}
@@ -868,7 +882,7 @@ impl<T: Config> Pallet<T> {
 		}
 
 		// Get statements from remote endpoint
-		let statements = Self::parse_statements();
+		let statements = Self::parse_statements()?;
 
 		// If statements are empty, do nothing
 		if statements.is_empty() {
@@ -885,7 +899,14 @@ impl<T: Config> Pallet<T> {
 				Ok(()) => {
 					log::info!("[OCW] [{:?}] Submitted tx", acc.id)
 				},
-				Err(e) => log::error!("[OCW] [{:?}] Failed to submit transaction: {:?}", acc.id, e),
+				Err(e) => {
+					log::error!(
+						"[OCW] Failed to submit transaction from: [{:?}] reason: {:?}",
+						acc.id,
+						e
+					);
+					return Err("Failed to submit transaction");
+				},
 			}
 		}
 
@@ -900,10 +921,8 @@ impl<T: Config> Pallet<T> {
 	/// 	`iban_account: IbanAccount` - IBAN account that owns the statement
 	/// 	`incoming_txs: Vec<TransactionOf<T>>` - Incoming transactions in the statement
 	///		`outgoing_txs: Vec<TransactionOf<T>>` - Outgoing transactions in the statement
-	fn parse_statements() -> Vec<(BankAccountOf<T>, Vec<TransactionOf<T>>)> {
-		// fetch json value
-		let remote_url = ApiUrl::<T>::get();
-		let json = Self::fetch_json(&remote_url[..]).unwrap();
+	fn parse_statements() -> Result<Vec<(BankAccountOf<T>, Vec<TransactionOf<T>>)>, &'static str> {
+		let json = Self::fetch_json()?;
 
 		let raw_array = json.as_array();
 
@@ -926,9 +945,9 @@ impl<T: Config> Pallet<T> {
 					balances.push((bank_account, transactions));
 				}
 			}
-			balances
+			Ok(balances)
 		} else {
-			Vec::new()
+			Ok(Vec::new())
 		}
 	}
 

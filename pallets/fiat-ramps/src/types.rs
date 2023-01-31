@@ -39,13 +39,15 @@ pub type Iban<MaxLength> = BoundedVec<u8, MaxLength>;
 pub type IbanOf<T> = Iban<<T as Config>::MaxIbanLength>;
 
 /// Transaction type
-pub type TransactionOf<T> = Transaction<<T as Config>::MaxIbanLength, <T as Config>::MaxStringLength>;
+pub type TransactionOf<T> =
+	Transaction<<T as Config>::MaxIbanLength, <T as Config>::MaxStringLength>;
 
 /// Bank account type
 pub type BankAccountOf<T> = BankAccount<<T as Config>::MaxIbanLength>;
 
 /// Transfer destination of `Config`
-pub type TransferDestinationOf<T> = TransferDestination<<T as Config>::MaxIbanLength, <T as frame_system::Config>::AccountId>;
+pub type TransferDestinationOf<T> =
+	TransferDestination<<T as Config>::MaxIbanLength, <T as frame_system::Config>::AccountId>;
 
 /// Types of activities that can be performed by the OCW
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
@@ -67,7 +69,7 @@ pub struct BurnRequest<MaxLength: Get<u32>, Balance: MaxEncodedLen> {
 
 /// Trait for deseralizing a value from a JsonValue type
 pub trait Deserialize<T> {
-    fn deserialize(value: &JsonValue) -> Option<T>;
+	fn deserialize(value: &JsonValue) -> Option<T>;
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
@@ -81,7 +83,7 @@ pub(crate) struct Payload<Public> {
 pub enum TransactionType {
 	Incoming,
 	Outgoing,
-	None
+	None,
 }
 
 /// Representation of transaction in EBICS format
@@ -98,11 +100,11 @@ pub struct Transaction<MaxLength: Get<u32>, StringMaxLength: Get<u32>> {
 	/// Reference of the transaction, usually includes recipient's `AccountId`
 	pub reference: BoundedString<StringMaxLength>,
 	/// Type of the transaction: incoming or outgoing
-	pub tx_type: TransactionType
+	pub tx_type: TransactionType,
 }
 
 /// Behavior of a bank account on-chain
-/// 
+///
 /// This defines what a bank account should do when it receives an extrinsic
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum AccountBehaviour<MaxLength: Get<u32>> {

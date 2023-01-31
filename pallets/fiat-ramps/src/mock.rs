@@ -1,15 +1,11 @@
-
 use crate::{self as fiat_ramps, crypto::Public};
-use codec::{MaxEncodedLen, Decode, Encode};
-use frame_support::{
-	parameter_types, 
-};
-use sp_core::{
-    sr25519::Signature, H256, ByteArray
-};
+use codec::{Decode, Encode, MaxEncodedLen};
+use frame_support::{parameter_types, weights::Weight};
+use scale_info::TypeInfo;
+use sp_core::{sr25519::Signature, ByteArray, H256};
 use sp_runtime::{
-	testing::{Header, TestXt}, 
-	traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify}
+	testing::{Header, TestXt},
+	traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify},
 };
 
 pub fn get_test_accounts() -> Vec<AccountId> {
@@ -30,22 +26,23 @@ const MILLISECS_PER_BLOCK: u64 = 4000;
 
 //Mock runtime for our tests
 frame_support::construct_runtime!(
-	pub enum Test where
+	pub enum Test
+	where
 		Block = Block,
 		NodeBlock = Block,
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
-		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-        FiatRampsExample: fiat_ramps::{Pallet, Call, Storage, Event<T>, ValidateUnsigned},
-		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
-		Sudo: pallet_sudo::{Pallet, Call, Config<T>, Storage, Event<T>},
-		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
+		System: frame_system,
+		FiatRampsExample: fiat_ramps,
+		Timestamp: pallet_timestamp,
+		Sudo: pallet_sudo,
+		Balances: pallet_balances,
 	}
 );
 
 parameter_types! {
 	pub BlockWeights: frame_system::limits::BlockWeights =
-		frame_system::limits::BlockWeights::simple_max(1024);
+		frame_system::limits::BlockWeights::simple_max(Weight::from_ref_time(1024));
 	pub const BlockHashCount: u64 = 2400;
 
 }
@@ -120,18 +117,15 @@ impl pallet_sudo::Config for Test {
 	type RuntimeCall = RuntimeCall;
 }
 
-parameter_types!{
+parameter_types! {
 	pub const MinimumInterval: u64 = MILLISECS_PER_BLOCK;
 	pub const UnsignedPriority: u64 = 1000;
-	/// We set decimals for fiat currencies to 2
-	/// (e.g. 1 EUR = 1.00 EUR)
-	pub const Decimals: u8 = 10;
 	/// Maximum number of characters in IBAN
-	#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, MaxEncodedLen)]
-	pub const MaxIbanLength: u8 = 34;
+	#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, MaxEncodedLen, TypeInfo)]
+	pub const MaxIbanLength: u32 = 64;
 	/// Bound of string length
-	#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, MaxEncodedLen)]
-	pub const MaxStringLength: u8 = 255;
+	#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, MaxEncodedLen, TypeInfo)]
+	pub const MaxStringLength: u32 = 255;
 }
 
 impl fiat_ramps::Config for Test {
@@ -170,9 +164,7 @@ where
 
 /// Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	let mut t = frame_system::GenesisConfig::default()
-	.build_storage::<Test>()
-	.unwrap();
+	let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 
 	// Give initial balances for test accounts
 	pallet_balances::GenesisConfig::<Test> {
