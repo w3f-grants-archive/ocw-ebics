@@ -174,7 +174,7 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		/// Set api url for fetching bank statements
 		// TO-DO change weight for appropriate value
-		#[pallet::weight(0)]
+		#[pallet::weight(T::DbWeight::get().reads_writes(2, 1))]
 		pub fn set_api_url(origin: OriginFor<T>, url: StringOf<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 			<ApiUrl<T>>::put(url);
@@ -188,7 +188,7 @@ pub mod pallet {
 		/// * `origin` - The origin of the call
 		/// * `iban` - IBAN of the account
 		/// * `behaviour` - Behaviour of the account, i.e. whether it is a deposit or withdrawal account
-		#[pallet::weight(1000)]
+		#[pallet::weight(T::DbWeight::get().reads_writes(2, 1))]
 		pub fn create_account(
 			origin: OriginFor<T>,
 			iban: IbanOf<T>,
@@ -217,7 +217,7 @@ pub mod pallet {
 		/// # Arguments
 		///
 		/// `iban`: IbanAccount struct
-		#[pallet::weight(1000)]
+		#[pallet::weight(T::DbWeight::get().reads_writes(2, 1))]
 		pub fn unmap_iban_account(
 			origin: OriginFor<T>,
 			iban: IbanOf<T>,
@@ -243,7 +243,7 @@ pub mod pallet {
 		/// `amount`: Amount of tokens to burn
 		/// `iban`: IbanOf<T> account of the receiver
 		/// `dest`: `TransferDestination` enum which can be either `Iban`, `AccountId` or withdrawal
-		#[pallet::weight(1000)]
+		#[pallet::weight(T::DbWeight::get().reads_writes(10, 2))]
 		pub fn transfer(
 			origin: OriginFor<T>,
 			amount: BalanceOf<T>,
@@ -319,7 +319,7 @@ pub mod pallet {
 		/// `statements`: list of statements to process
 		/// 	`iban_account`: IBAN account connected to the statement
 		/// 	`Vec<Transaction>`: List of transactions to process
-		#[pallet::weight(10_000)]
+		#[pallet::weight(100_000_000)]
 		pub fn process_statements(
 			origin: OriginFor<T>,
 			statements: Vec<(BankAccountOf<T>, Vec<TransactionOf<T>>)>,
