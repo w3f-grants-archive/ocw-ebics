@@ -1,13 +1,13 @@
-use node_runtime::{
+use hex_literal::hex;
+use node_template_runtime::{
 	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, Signature, SudoConfig,
 	SystemConfig, WASM_BINARY,
 };
 use sc_service::{ChainType, Properties};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{sr25519, Pair, Public, Decode};
+use sp_core::{sr25519, Decode, Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
-use hexlit::hex;
 
 // The URL for the telemetry server.
 // const STAGING_TELEMETRY_URL: &str = "wss://telemetry.polkadot.io/submit/";
@@ -45,7 +45,8 @@ pub fn development_config() -> Result<ChainSpec, String> {
 	chain_properties.insert("tokenDecimals".into(), 10.into());
 	chain_properties.insert("tokenSymbol".into(), "pEURO".into());
 
-	let ocw_account: [u8; 32] = hex!("004771ae35f923e82e77fafd1f4b1878cd4b372a7406c7b88125119f5ffbdc29");
+	let ocw_account: [u8; 32] =
+		hex!("004771ae35f923e82e77fafd1f4b1878cd4b372a7406c7b88125119f5ffbdc29");
 
 	let ocw_account_id = AccountId::decode(&mut &ocw_account[..]).unwrap();
 
@@ -67,7 +68,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					get_account_id_from_seed::<sr25519::Public>("Alice"),
 					get_account_id_from_seed::<sr25519::Public>("Bob"),
 					get_account_id_from_seed::<sr25519::Public>("Charlie"),
-					ocw_account_id.clone()
+					ocw_account_id.clone(),
 				],
 				true,
 			)
@@ -83,7 +84,6 @@ pub fn development_config() -> Result<ChainSpec, String> {
 		Some(chain_properties),
 		// Extensions
 		None,
-		
 	))
 }
 
@@ -162,6 +162,6 @@ fn testnet_genesis(
 			// Assign network admin rights.
 			key: Some(root_key),
 		},
-		// transaction_payment: Default::default(),
+		transaction_payment: Default::default(),
 	}
 }

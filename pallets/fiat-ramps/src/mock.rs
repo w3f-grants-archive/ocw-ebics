@@ -1,14 +1,11 @@
-
 use crate::{self as fiat_ramps, crypto::Public};
-use frame_support::{
-	parameter_types, 
-};
-use sp_core::{
-    sr25519::Signature, H256, ByteArray
-};
+use codec::{Decode, Encode, MaxEncodedLen};
+use frame_support::{parameter_types, weights::Weight};
+use scale_info::TypeInfo;
+use sp_core::{sr25519::Signature, ByteArray, H256};
 use sp_runtime::{
-	testing::{Header, TestXt}, 
-	traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify}
+	testing::{Header, TestXt},
+	traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify},
 };
 
 pub fn get_test_accounts() -> Vec<AccountId> {
@@ -29,22 +26,23 @@ const MILLISECS_PER_BLOCK: u64 = 4000;
 
 //Mock runtime for our tests
 frame_support::construct_runtime!(
-	pub enum Test where
+	pub enum Test
+	where
 		Block = Block,
 		NodeBlock = Block,
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
-		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-        FiatRampsExample: fiat_ramps::{Pallet, Call, Storage, Event<T>, ValidateUnsigned},
-		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
-		Sudo: pallet_sudo::{Pallet, Call, Config<T>, Storage, Event<T>},
-		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>},
+		System: frame_system,
+		FiatRampsExample: fiat_ramps,
+		Timestamp: pallet_timestamp,
+		Sudo: pallet_sudo,
+		Balances: pallet_balances,
 	}
 );
 
 parameter_types! {
 	pub BlockWeights: frame_system::limits::BlockWeights =
-		frame_system::limits::BlockWeights::simple_max(1024);
+		frame_system::limits::BlockWeights::simple_max(Weight::from_ref_time(1024));
 	pub const BlockHashCount: u64 = 2400;
 
 }
@@ -53,8 +51,8 @@ impl frame_system::Config for Test {
 	type BlockWeights = ();
 	type BlockLength = ();
 	type DbWeight = ();
-	type Origin = Origin;
-	type Call = Call;
+	type RuntimeOrigin = RuntimeOrigin;
+	type RuntimeCall = RuntimeCall;
 	type Index = u64;
 	type BlockNumber = u64;
 	type Hash = H256;
@@ -62,7 +60,7 @@ impl frame_system::Config for Test {
 	type AccountId = sp_core::sr25519::Public;
 	type Lookup = IdentityLookup<Self::AccountId>;
 	type Header = Header;
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type BlockHashCount = BlockHashCount;
 	type Version = ();
 	type PalletInfo = PalletInfo;
@@ -75,7 +73,7 @@ impl frame_system::Config for Test {
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
-pub type Extrinsic = TestXt<Call, ()>;
+pub type Extrinsic = TestXt<RuntimeCall, ()>;
 pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
 
 impl frame_system::offchain::SigningTypes for Test {
@@ -95,7 +93,7 @@ impl pallet_balances::Config for Test {
 	/// The type for recording an account's balance.
 	type Balance = Balance;
 	/// The ubiquitous event type.
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type DustRemoval = ();
 	type ExistentialDeposit = ExistentialDeposit;
 	type AccountStore = System;
@@ -114,57 +112,59 @@ impl pallet_timestamp::Config for Test {
 	type WeightInfo = ();
 }
 
-parameter_types!{
-	pub const MinimumInterval: u64 = MILLISECS_PER_BLOCK;
-	pub const UnsignedPriority: u64 = 1000;
-	/// We set decimals for fiat currencies to 2
-	/// (e.g. 1 EUR = 1.00 EUR)
-	pub const Decimals: u8 = 10;
+impl pallet_sudo::Config for Test {
+	type RuntimeEvent = RuntimeEvent;
+	type RuntimeCall = RuntimeCall;
 }
 
-impl pallet_sudo::Config for Test {
-	type Event = Event;
-	type Call = Call;
+parameter_types! {
+	pub const MinimumInterval: u64 = MILLISECS_PER_BLOCK;
+	pub const UnsignedPriority: u64 = 1000;
+	/// Maximum number of characters in IBAN
+	#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, MaxEncodedLen, TypeInfo)]
+	pub const MaxIbanLength: u32 = 64;
+	/// Bound of string length
+	#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, MaxEncodedLen, TypeInfo)]
+	pub const MaxStringLength: u32 = 255;
 }
 
 impl fiat_ramps::Config for Test {
 	type AuthorityId = fiat_ramps::crypto::OcwAuthId;
-	type Event = Event;
-	type Call = Call;
+	type RuntimeEvent = RuntimeEvent;
+	type RuntimeCall = RuntimeCall;
 	type Currency = Balances;
 	type TimeProvider = Timestamp;
 	type MinimumInterval = MinimumInterval;
 	type UnsignedPriority = UnsignedPriority;
-	type Decimals = Decimals;
+	type MaxIbanLength = MaxIbanLength;
+	type MaxStringLength = MaxStringLength;
 }
 
 impl<C> frame_system::offchain::SendTransactionTypes<C> for Test
 where
-	Call: From<C>,
+	RuntimeCall: From<C>,
 {
-	type OverarchingCall = Call;
+	type OverarchingCall = RuntimeCall;
 	type Extrinsic = Extrinsic;
 }
 
 impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Test
 where
-	Call: From<LocalCall>,
+	RuntimeCall: From<LocalCall>,
 {
 	fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
-		call: Call,
+		call: RuntimeCall,
 		_public: <Signature as Verify>::Signer,
 		_account: AccountId,
 		nonce: u64,
-	) -> Option<(Call, <Extrinsic as ExtrinsicT>::SignaturePayload)> {
+	) -> Option<(RuntimeCall, <Extrinsic as ExtrinsicT>::SignaturePayload)> {
 		Some((call, (nonce, ())))
 	}
 }
 
 /// Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	let mut t = frame_system::GenesisConfig::default()
-	.build_storage::<Test>()
-	.unwrap();
+	let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 
 	// Give initial balances for test accounts
 	pallet_balances::GenesisConfig::<Test> {
