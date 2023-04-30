@@ -22,11 +22,10 @@ use frame_system::{
 };
 use lite_json::{json::JsonValue, parse_json, Serialize};
 use sp_core::hexdisplay::AsBytesRef;
-use sp_runtime::DispatchError;
 use sp_runtime::{
 	offchain as rt_offchain,
 	offchain::storage::{MutateStorageError, StorageRetrievalError, StorageValueRef},
-	traits::AccountIdConversion,
+	traits::{AccountIdConversion, Zero},
 	transaction_validity::{InvalidTransaction, TransactionValidity},
 	AccountId32, RuntimeDebug, SaturatedConversion,
 };
@@ -56,7 +55,7 @@ pub use pallet::*;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use types::{AccountBehaviour, StringOf};
+	use types::StringOf;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
@@ -64,12 +63,11 @@ pub mod pallet {
 
 	/// This is the pallet's trait
 	#[pallet::config]
-	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
+	pub trait Config:
+		frame_system::Config + CreateSignedTransaction<Call<Self>> + pallet_sudo::Config
+	{
 		/// The identifier type for an offchain SendSignedTransaction
 		type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
-
-		/// The overarching dispatch call type.
-		type RuntimeCall: From<Call<Self>>;
 
 		/// The overarching event type.
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
@@ -99,6 +97,13 @@ pub mod pallet {
 		/// multiple pallets send unsigned transactions.
 		#[pallet::constant]
 		type UnsignedPriority: Get<u64>;
+
+		/// OCW account
+		type OcwAccount: Get<Self::AccountId>;
+
+		/// Max number of statements to process
+		#[pallet::constant]
+		type MaxStatements: Get<u32> + PartialEq + Eq + MaxEncodedLen + TypeInfo + Clone;
 	}
 
 	#[pallet::hooks]
@@ -187,13 +192,8 @@ pub mod pallet {
 		///
 		/// * `origin` - The origin of the call
 		/// * `iban` - IBAN of the account
-		/// * `behaviour` - Behaviour of the account, i.e. whether it is a deposit or withdrawal account
 		#[pallet::weight(T::DbWeight::get().reads_writes(2, 1))]
-		pub fn create_account(
-			origin: OriginFor<T>,
-			iban: IbanOf<T>,
-			behaviour: AccountBehaviour<T::MaxIbanLength>,
-		) -> DispatchResultWithPostInfo {
+		pub fn create_account(origin: OriginFor<T>, iban: IbanOf<T>) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 
 			// TO-DO: need to check if account owner really owns this IBAN
@@ -201,7 +201,6 @@ pub mod pallet {
 				&who,
 				BankAccount::<T::MaxIbanLength> {
 					iban: iban.clone(),
-					behaviour,
 					balance: 0u128,
 					last_updated: T::TimeProvider::now().as_millis() as u64,
 				},
@@ -253,16 +252,7 @@ pub mod pallet {
 
 			ensure!(T::Currency::free_balance(&who) >= amount, Error::<T>::InsufficientBalance,);
 
-			ensure!(amount.saturated_into::<u128>() > 0, Error::<T>::AmountIsZero,);
-
-			// transfer amount to this pallet's account
-			T::Currency::transfer(
-				&who,
-				&Self::account_id(),
-				amount,
-				ExistenceRequirement::AllowDeath,
-			)
-			.map_err(|_| DispatchError::Other("Can't burn funds"))?;
+			ensure!(!amount.is_zero(), Error::<T>::AmountIsZero);
 
 			// Request id (nonce)
 			let request_id = Self::burn_request_count();
@@ -297,6 +287,14 @@ pub mod pallet {
 				_ => Self::get_account_id(&dest_iban),
 			};
 
+			// transfer amount to this pallet's account
+			T::Currency::transfer(
+				&who,
+				&Self::account_id(),
+				amount,
+				ExistenceRequirement::AllowDeath,
+			)?;
+
 			// create burn request event
 			Self::deposit_event(Event::BurnRequest {
 				request_id,
@@ -322,10 +320,12 @@ pub mod pallet {
 		#[pallet::weight(100_000_000)]
 		pub fn process_statements(
 			origin: OriginFor<T>,
-			statements: Vec<(BankAccountOf<T>, Vec<TransactionOf<T>>)>,
+			statements: BoundedVec<(BankAccountOf<T>, Vec<TransactionOf<T>>), T::MaxStatements>,
 		) -> DispatchResultWithPostInfo {
-			// this can be called only by the sudo account
-			ensure_root(origin)?;
+			// this can be called only by the ocw account
+			let who = ensure_signed(origin)?;
+
+			ensure!(who == T::OcwAccount::get(), Error::<T>::UnauthorizedCall);
 
 			log::info!("[OCW] Processing statements");
 
@@ -383,6 +383,8 @@ pub mod pallet {
 		AmountIsZero,
 		/// Insufficient funds
 		InsufficientBalance,
+		/// Unauthorized call for `process_statements`. Only ocw account can call this
+		UnauthorizedCall,
 	}
 
 	#[pallet::validate_unsigned]
@@ -393,6 +395,35 @@ pub mod pallet {
 				Self::validate_tx_parameters(statements)
 			} else {
 				InvalidTransaction::Call.into()
+			}
+		}
+	}
+
+	/// Genesis configuration
+	#[pallet::genesis_config]
+	pub struct GenesisConfig<T: Config> {
+		pub accounts: Vec<(T::AccountId, Vec<u8>)>,
+	}
+
+	#[cfg(feature = "std")]
+	impl<T: Config> Default for GenesisConfig<T> {
+		fn default() -> Self {
+			Self { accounts: vec![] }
+		}
+	}
+
+	#[pallet::genesis_build]
+	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+		fn build(&self) {
+			for (account, iban) in &self.accounts {
+				Accounts::<T>::insert(
+					account,
+					BankAccount {
+						iban: iban.clone().try_into().expect("IBAN should be valid"),
+						balance: 0u128,
+						last_updated: T::TimeProvider::now().as_millis() as u64,
+					},
+				);
 			}
 		}
 	}
@@ -587,7 +618,8 @@ impl<T: Config> Pallet<T> {
 				}
 			},
 			TransactionType::Outgoing => {
-				if let Some(receiver) = dest {
+				let pallet_account = Self::account_id();
+				if let Some(_) = dest {
 					let burn_request =
 						reference.map_or(None, |request_id| BurnRequests::<T>::take(request_id));
 
@@ -598,59 +630,80 @@ impl<T: Config> Pallet<T> {
 					// account specified in the burn request.
 					//
 					// Otherwise, we simply transfer the funds from the statement owner to the receiver
-					let (from, to, tx_amount) = match burn_request {
-						Some(request) => {
-							let dest_account = Self::get_account_id(&request.dest_iban)
-								.unwrap_or(receiver.clone());
-							(Self::account_id(), dest_account, request.amount)
-						},
-						None => (statement_owner.clone(), receiver.clone(), amount),
-					};
+					if let Some(request) = burn_request {
+						match (
+							Self::get_account_id(&request.burner),
+							Self::get_account_id(&request.dest_iban),
+						) {
+							(Some(from), Some(to)) => {
+								if from == to {
+									// user is burning funds to himself, meaning he is withdrawing from ihis bank account
 
-					T::Currency::transfer(&from, &to, tx_amount, ExistenceRequirement::AllowDeath)?;
+									// Returns negative imbalance
+									let burn = T::Currency::burn(amount.clone());
+									// Burn negative imbalance from the account
+									if let Ok(_) = T::Currency::settle(
+										&pallet_account,
+										burn,
+										WithdrawReasons::TRANSFER,
+										ExistenceRequirement::AllowDeath,
+									) {
+										Self::deposit_event(Event::Burned {
+											who: pallet_account.clone(),
+											iban: transaction.iban.clone(),
+											amount: amount.clone(),
+										});
+									}
+								} else {
+									// both sides are on-chain, so we can simply transfer the funds
+									T::Currency::transfer(
+										&from,
+										&to,
+										amount,
+										ExistenceRequirement::AllowDeath,
+									)?;
+								}
+							},
+							(Some(_account), None) => {
+								// user is sending to an unknown account, so we burn the funds
+								// Returns negative imbalance
+								let burn = T::Currency::burn(amount.clone());
+								// Burn negative imbalance from the account
+								if let Ok(_) = T::Currency::settle(
+									&pallet_account,
+									burn,
+									WithdrawReasons::TRANSFER,
+									ExistenceRequirement::AllowDeath,
+								) {
+									Self::deposit_event(Event::Burned {
+										who: pallet_account.clone(),
+										iban: transaction.iban.clone(),
+										amount: amount.clone(),
+									});
+								}
+							},
+							_ => {},
+						}
+					};
 				} else {
 					// Receiver is not on-chain, therefore we simply burn from statement owner
-					log::info!("[OCW] Burn from {:?} {:?}", statement_owner, amount.clone());
+					log::info!("[OCW] Burn from {:?} {:?}", pallet_account, amount.clone());
 
 					// Returns negative imbalance
-					let burn = <T>::Currency::burn(amount.clone());
+					let burn = T::Currency::burn(amount.clone());
 
 					// Burn negative imbalance from the account
 					if let Ok(_) = T::Currency::settle(
-						statement_owner,
+						&pallet_account,
 						burn,
 						WithdrawReasons::TRANSFER,
-						ExistenceRequirement::KeepAlive,
+						ExistenceRequirement::AllowDeath,
 					) {
 						Self::deposit_event(Event::Burned {
-							who: statement_owner.clone(),
+							who: pallet_account.clone(),
 							iban: transaction.iban.clone(),
 							amount,
 						});
-						let (request_id, maybe_request) = match reference {
-							Some(request_id) => (request_id, BurnRequests::<T>::take(request_id)),
-							None => (0, None),
-						};
-
-						if let Some(request) = maybe_request {
-							Self::deposit_event(Event::BurnRequest {
-								request_id,
-								burner: statement_owner.clone(),
-								dest: Self::get_account_id(&request.dest_iban),
-								dest_iban: request.dest_iban,
-								amount: request.amount,
-							});
-
-							// Returns negative imbalance
-							let burn = T::Currency::burn(request.amount);
-
-							let _ = T::Currency::settle(
-								&Self::account_id(),
-								burn,
-								WithdrawReasons::TRANSFER,
-								ExistenceRequirement::KeepAlive,
-							);
-						}
 					}
 				}
 			},
@@ -921,14 +974,19 @@ impl<T: Config> Pallet<T> {
 	/// 	`iban_account: IbanAccount` - IBAN account that owns the statement
 	/// 	`incoming_txs: Vec<TransactionOf<T>>` - Incoming transactions in the statement
 	///		`outgoing_txs: Vec<TransactionOf<T>>` - Outgoing transactions in the statement
-	fn parse_statements() -> Result<Vec<(BankAccountOf<T>, Vec<TransactionOf<T>>)>, &'static str> {
+	fn parse_statements(
+	) -> Result<BoundedVec<(BankAccountOf<T>, Vec<TransactionOf<T>>), T::MaxStatements>, &'static str>
+	{
 		let json = Self::fetch_json()?;
 
 		let raw_array = json.as_array();
 
 		if let Some(v) = raw_array {
-			let mut balances: Vec<(BankAccountOf<T>, Vec<TransactionOf<T>>)> =
-				Vec::with_capacity(v.len());
+			let mut balances =
+				BoundedVec::<(BankAccountOf<T>, Vec<TransactionOf<T>>), T::MaxStatements>::default(
+				);
+			// let mut balances: Vec<(BankAccountOf<T>, Vec<TransactionOf<T>>)> =
+			// 	Vec::with_capacity(v.len());
 			for val in v.iter() {
 				// extract iban account
 				if let Ok(bank_account) = BankAccountOf::<T>::try_from(val) {
@@ -942,12 +1000,15 @@ impl<T: Config> Pallet<T> {
 
 					transactions.append(&mut incoming_transactions);
 
-					balances.push((bank_account, transactions));
+					// try pushing to balances
+					if let Err(_) = balances.try_push((bank_account, transactions)) {
+						log::error!("[OCW] Bounded vector overflow");
+					}
 				}
 			}
 			Ok(balances)
 		} else {
-			Ok(Vec::new())
+			Ok(Default::default())
 		}
 	}
 
