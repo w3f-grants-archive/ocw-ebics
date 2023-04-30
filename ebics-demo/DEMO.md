@@ -95,7 +95,7 @@ It should take couple of minutes for chain and EBICS backend to process the tran
 
 ### Donating to account
 
-You can also donate to Jack's on-chain account. 
+You can also donate to Jack's on-chain account. Select `Bob`'s wallet from the top right corner and select `Address` for transfer destination.
 
 ![Donate to account](./assets/donate-via-account.png)
 
