@@ -2,7 +2,16 @@
 ![Unit tests](https://github.com/element36-io/ocw-ebics/actions/workflows/unit-tests.yml/badge.svg)
 # Ebics Off-chain Worker Substrate pallet
 
-Substrate solo chain that is connected with EBICS banking interface
+The repository contains a substrate solo chain that is connected to 
+an arbitrary bank account which supports
+the EBICS banking interface [(ISO20022)](https://www.iso20022.org/).
+It synchronizes balances and transaction of a bank account with the solo chain
+using an off-chain-worker. This worker also contains extrinsincs to
+trigger wire-transfers on the connected bank account.
+
+Later we want to use Zero-Knowledge proofs to enable trustless atomic swap between 
+FIAT and any ledger technology. The system will be called Hyperfridge - the whitepaper
+is [here](docs/hyperfridge-draft.pdf).
 
 ### Getting Started
 
