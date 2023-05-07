@@ -10,17 +10,16 @@ Below is the workflow for easily ramping on and off to our chain:
 
 - First and foremost, every user that wants to connect their bank account to FiatRamps, needs to call `map_iban_account` extrinsic
 - Once on-chain account is mapped to off-chain bank account, user can perform following actions:
-  - Burn funds, aka withdraw from bank account
-  - Burn funds to IBAN, i.e transfer funds to another IBAN account
-  - Burn funds to account, i.e transfer funds to another account on-chain
+  - Burn funds, i.e withdraw from bank account
+  - Transfer funds to IBAN, i.e transfer funds to another IBAN account
+  - Transfer funds to account, i.e transfer funds to another account on-chain
 
 In order to move funds from their bank account, EBICS users call `/unpeg` API call providing neccessary recipient details.
 
-Our pallet exposes three extrinsics that can be used to transfer or withdraw funds from the bank account that supports EBICS standard. The following extrinsics are available:
+Our pallet exposes a single extrinsic that can be used to transfer or withdraw funds from the bank account that supports EBICS standard. This extrinsic is called `transfer` and it has following parameters:
 
-- `burn` - used for simply withdrawing money from the bank account  
-- `transferToAddress` - transfers funds to a given address. This will extract IBAN that is mapped to the address from the pallet storage and makes `unpeg` request to the NEXUS API.  
-- `transferToIban` - Simply transfers funds to the given IBAN. This also makes `unpeg` request to the NEXUS API.
+- `amount` - specifies the amount of funds to be transferred
+- `dest` - a custom enum that specifies the destination of the transfer. It can be either `Address` or `Iban` or `Withdraw`. If `Address` is chosen, then `dest` field should contain an on-chain account address. If `Iban` is chosen, then `dest` field should contain an IBAN number. `Withdraw` does not require any additional parameters.
 
 It is important to note that transferring or withdrawing is not a synchronous process. This is because finality of transactions in EBICS standard is not instant. To handle this issue, our pallet also serves as escrow.
 
@@ -52,7 +51,7 @@ suri: cup swing hill dinner pioneer mom stick steel sad raven oak practice
 public_key: 5C555czPfaHgYhKhsRg2KNCLGCJ82jVsvweTHAnfvT83uy5T
 ```
 
-Once you have submitted the call, head over to `Extrinsics -> fiatRamps -> mapIbanAccount` call. Here we need to map Alice's IBAN number to his on-chain account address. Simply choose Alice as a signer and the  copy and paste value of the IBAN number from the following JSON file and submit the extrinsic.
+Once you have submitted the call, head over to `Extrinsics -> fiatRamps -> createAccount` call. Here we need to map Alice's IBAN number to his on-chain account address. Simply choose Alice as a signer and the  copy and paste value of the IBAN number from the following JSON file and submit the extrinsic.
 
 ```json
 {
@@ -61,7 +60,7 @@ Once you have submitted the call, head over to `Extrinsics -> fiatRamps -> mapIb
     "iban" : "CH2108307000289537320",
     "accountId": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
   }, {
-    "ownerName" : "John Doe",
+    "ownerName" : "Jack",
     "iban" : "CH2108307000289537313",
     "accountId": "5Hg6mE6QCiqDFH21yjDGe2JSezEZSTn9mBsZa6JsC3wo438c",
     "seed": "0x5108e950fb18a11a372da602c1714f289002204a8003748263bb9c351b57d3aa"
@@ -72,6 +71,8 @@ Once you have submitted the call, head over to `Extrinsics -> fiatRamps -> mapIb
   } ]
 }
 ```
+
+`Jack's` IBAN comes mapped in genesis, so we don't need to map it again.
 
 ![Alice connecting her bank account](/assets/alice-map-account.png)
 
@@ -89,7 +90,7 @@ This is how new stablecoins are minted in our chain.
 
 ### Stablecoins are burned from Alice
 
-Now, in order to see how burning works, we can either go to EBICS service again and call `/ebics/api-v1/unpeg` request or submit `transferToAddress`/`transferToIban` extrinsic. Let's use EBICS service again, as extrinsic calls are covered in the next demos. After filling up the `recipientIban` field with Charlie's IBAN, our call should look like this:
+Now, in order to see how burning works, we can either go to EBICS service again and call `/ebics/api-v1/unpeg` request or submit `fiatRamps.transfer` extrinsic. Let's use EBICS service again, as extrinsic calls are covered in the next demos. After filling up the `recipientIban` field with Charlie's IBAN, our call should look like this:
 
 ![Alice burns](/assets/ebics-burning.png)
 
@@ -98,7 +99,8 @@ Again, we wait for offchain worker to process the statement and shortly after we
 ![Burn event happens](/assets/ocw-burning.png)
 
 #### Alice transfers to Charlie via EBICS API
-For this part of the tutorial we will need to map Charlie and Bob's IBAN numbers to their on-chain account addresses. We submit `mapIbanAccount` extrinsic with IBAN addresses of Charlie and Bob, respectively, making sure that they are signing the extrinsic call. For example, Bob mapping his account would look like this:
+
+For this part of the tutorial we will need to map Charlie and Bob's IBAN numbers to their on-chain account addresses. We submit `createAccount` extrinsic with IBAN addresses of Charlie and Bob, respectively, making sure that they are signing the extrinsic call. For example, Bob mapping his account would look like this:
 
 ![Bob connects his account](/assets/bob-map-iban.png)
 
@@ -116,7 +118,7 @@ Once offchain worker has processed new statements, two `Transfer` events occur:
 
 #### Alice transfers to Charlie via Extrinsic
 
-We go to `Extrinsic` tab and choose `transferToAddress` extrinsic call. Fill out the necessary fields and make sure that the amount is a positive number, otherwise extrinsic will fail.
+We go to `Extrinsic` tab, choose `fiatRamps.transfer` extrinsic call and choose `destination` as `Address`. Fill out the necessary fields and make sure that the amount is a positive number, otherwise extrinsic will fail.
 
 ![Extrinsic from Alice to Charlie](/assets/alice-charlie-ext.png)
 
