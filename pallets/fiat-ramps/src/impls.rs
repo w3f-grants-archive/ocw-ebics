@@ -1,8 +1,7 @@
 //! Implementations of traits and types for the pallet
 use core::convert::TryInto;
 
-use crate::types::*;
-use crate::*;
+use crate::{types::*, *};
 use sp_std::default::Default;
 
 use self::utils::{extract_value, parse_object};
@@ -89,18 +88,14 @@ impl<MaxIbanLength: Get<u32>, MaxStringLength: Get<u32>>
 
 		let mut transactions = Vec::new();
 
-		match json {
-			JsonValue::Object(obj) => match parse_object(key_string, &obj) {
-				JsonValue::Array(txs) => {
-					for json_tx in txs {
-						if let Some(tx) = Self::from_json_statement(&json_tx, &transaction_type) {
-							transactions.push(tx);
-						}
+		if let JsonValue::Object(obj) = json {
+			if let JsonValue::Array(txs) = parse_object(key_string, obj) {
+				for json_tx in txs {
+					if let Some(tx) = Self::from_json_statement(&json_tx, &transaction_type) {
+						transactions.push(tx);
 					}
-				},
-				_ => {},
-			},
-			_ => {},
+				}
+			};
 		};
 
 		Some(transactions)

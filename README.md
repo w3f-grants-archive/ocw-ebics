@@ -84,6 +84,14 @@ cargo test -p fiat-ramps
 make run-tests
 ```
 
+## Linting
+
+To run `clippy` linter, execute the following command:
+
+```sh
+cargo clippy
+```
+
 ### Single-Node Development Chain
 
 This command will start the single-node development chain with persistent state:

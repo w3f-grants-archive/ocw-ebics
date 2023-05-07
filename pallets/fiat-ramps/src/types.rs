@@ -58,7 +58,7 @@ pub enum OcwActivity {
 }
 
 /// Type that represents a burn request
-#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct BurnRequest<MaxLength: Get<u32>, Balance: MaxEncodedLen> {
 	pub id: u64,

@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 // `construct_runtime!` does a lot of recursion and requires us to increase the limit to 256.
 #![recursion_limit = "256"]
+#![allow(clippy::useless_conversion)]
 
 // Make the WASM binary available.
 #[cfg(feature = "std")]
@@ -291,7 +292,7 @@ pub type SignedPayload = generic::SignedPayload<RuntimeCall, SignedExtra>;
 parameter_types! {
 	// interval in milliseconds between two offchain worker instances
 	// we set it at 5 block times
-	pub const MinimumInterval: u64 = MILLISECS_PER_BLOCK * 1;
+	pub const MinimumInterval: u64 = MILLISECS_PER_BLOCK;
 	pub const UnsignedPriority: u64 = 1000;
 	#[derive(TypeInfo, Encode, Decode, Clone, PartialEq, Eq, MaxEncodedLen, Debug)]
 	pub const MaxIbanLength: u32 = 64;
