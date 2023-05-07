@@ -8,14 +8,44 @@ This demo is a decentralized application that allows users to buy someone a coff
 
 ## Setup
 
+To get started, obviously make sure you have the necessary setup for Substrate development. Go through the main [README.md](../README.md) file to get started.
+
+### Makefile
+
+Makefile configuration is provided for convenience. You can use it to build the chain and the frontend, as well as to run the chain and the frontend in development mode.
+
+Run both:
+
+```bash
+make launch-demo-app
+```
+
+Run only the chain:
+
+```bash
+make launch-chain
+```
+
 ### Chain
 
-To get started, obviously make sure you have the necessary setup for Substrate development. Go through the main [README.md](../README.md) file to get started.
+If you prefer to not use the Makefile, you can run the setup manually.
 
 Start the chain in development mode with:
 ```bash
 cargo run --release -- --dev --tmp
 ```
+
+### Frontend
+
+To run the website, go through it's [README.md](./README.md) file.
+
+In another terminal, start the frontend with:
+
+```bash
+yarn start
+```
+
+### Offchain worker key
 
 You also need to insert the keypair for our offchain worker, since it will be signing and submitting transactions to the chain. Open `Polkadot.js` [explorer](https://cloudflare-ipfs.com/ipns/dotapps.io/?rpc=ws%3A%2F%2F127.0.0.1%3A9944#/explorer) and choose `author -> insertKey` RPC call and fill out the fields with the following values:
 
@@ -23,15 +53,6 @@ You also need to insert the keypair for our offchain worker, since it will be si
 key_type: ramp
 suri: cup swing hill dinner pioneer mom stick steel sad raven oak practice
 public_key: 5C555czPfaHgYhKhsRg2KNCLGCJ82jVsvweTHAnfvT83uy5T
-```
-
-### Frontend
-
-To run the website, go through it's [README.md](./README.md) file.
-
-Start the frontend with:
-```bash
-yarn start
 ```
 
 ## Demo

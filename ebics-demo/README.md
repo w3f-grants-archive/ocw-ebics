@@ -1,13 +1,8 @@
-# Substrate Front End Template
+# Ebics Demo 
 
-This template allows you to create a front-end application that connects to a
-[Substrate](https://github.com/paritytech/substrate) node back-end with minimal
-configuration. To learn about Substrate itself, visit the
-[Substrate Documentation](https://docs.substrate.io).
+This React application showcases FIAT on/off-ramp Substrate chain in action. Consists of a main page where users can donate to a recipient, and a recipient page where the recipient can withdraw the funds to their bank account.
 
-The template is built with [Create React App](https://github.com/facebook/create-react-app)
-and [Polkadot js API](https://polkadot.js.org/docs/api/). Familiarity with these tools
-will be helpful, but the template strives to be self-explanatory.
+This project has been forked from the [substrate-front-end-template](https://github.com/substrate-developer-hub/substrate-front-end-template) and modified to work with the [ebics-demo](../README.md) chain.
 
 ## Usage
 

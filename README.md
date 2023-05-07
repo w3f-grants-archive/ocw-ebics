@@ -36,6 +36,12 @@ Use the following command to build the node without launching it:
 cargo build --release
 ```
 
+or use Makefile:
+
+```sh
+make build
+```
+
 Note: the above code might take long to compile depending on your machine specs
 
 ## Run
@@ -54,12 +60,17 @@ node.
 
 ```sh
 ./target/release/node-template --dev --tmp
+
+# or, simply:
+make launch-chain
 ```
 
 You can run the development node with temporary storage:
 
 ```sh
 ./target/release/node-template --dev --tmp
+# or, simply:
+make launch-chain
 ```
 
 ## Tests
@@ -68,6 +79,9 @@ To run unit tests for offchain-worker, execute the following command:
 
 ```sh
 cargo test -p fiat-ramps
+
+# or, simply:
+make run-tests
 ```
 
 ### Single-Node Development Chain
