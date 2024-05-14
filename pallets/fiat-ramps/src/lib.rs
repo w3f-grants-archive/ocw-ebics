@@ -8,10 +8,11 @@ use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
 	ensure,
 	pallet_prelude::*,
-	traits::{Currency, ExistenceRequirement, Get, LockableCurrency, UnixTime, WithdrawReasons},
+	traits::{
+		BuildGenesisConfig, Currency, ExistenceRequirement, Get, LockableCurrency, UnixTime,
+		WithdrawReasons,
+	},
 };
-use scale_info::{prelude::format, TypeInfo};
-
 use frame_system::{
 	ensure_signed,
 	offchain::{
@@ -21,13 +22,14 @@ use frame_system::{
 	pallet_prelude::*,
 };
 use lite_json::{json::JsonValue, parse_json, Serialize};
+use scale_info::{prelude::format, TypeInfo};
 use sp_core::hexdisplay::AsBytesRef;
 use sp_runtime::{
 	offchain as rt_offchain,
 	offchain::storage::{MutateStorageError, StorageRetrievalError, StorageValueRef},
 	traits::{AccountIdConversion, Zero},
 	transaction_validity::{InvalidTransaction, TransactionValidity},
-	AccountId32, RuntimeDebug, SaturatedConversion,
+	AccountId32, SaturatedConversion,
 };
 use sp_std::{
 	convert::{TryFrom, TryInto},
@@ -67,7 +69,6 @@ pub mod pallet {
 	use types::StringOf;
 
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
 	/// This is the pallet's trait
@@ -85,8 +86,7 @@ pub mod pallet {
 		type TimeProvider: UnixTime;
 
 		/// Currency type
-		type Currency: Currency<Self::AccountId>
-			+ LockableCurrency<Self::AccountId, Moment = Self::BlockNumber>;
+		type Currency: Currency<Self::AccountId> + LockableCurrency<Self::AccountId>;
 
 		/// Maximum number of characters in IBAN
 		#[pallet::constant]
@@ -117,7 +117,7 @@ pub mod pallet {
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn offchain_worker(block_number: T::BlockNumber) {
+		fn offchain_worker(block_number: BlockNumberFor<T>) {
 			log::info!("[OCW] Instantiating offchain worker");
 
 			let parent_hash = <frame_system::Pallet<T>>::block_hash(block_number - 1u32.into());
@@ -189,6 +189,7 @@ pub mod pallet {
 		/// Set api url for fetching bank statements
 		// TO-DO change weight for appropriate value
 		#[pallet::weight(T::DbWeight::get().reads_writes(2, 1))]
+		#[pallet::call_index(0)]
 		pub fn set_api_url(origin: OriginFor<T>, url: StringOf<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 			<ApiUrl<T>>::put(url);
@@ -202,6 +203,7 @@ pub mod pallet {
 		/// * `origin` - The origin of the call
 		/// * `iban` - IBAN of the account
 		#[pallet::weight(T::DbWeight::get().reads_writes(2, 1))]
+		#[pallet::call_index(1)]
 		pub fn create_account(origin: OriginFor<T>, iban: IbanOf<T>) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 
@@ -226,6 +228,7 @@ pub mod pallet {
 		///
 		/// `iban`: IbanAccount struct
 		#[pallet::weight(T::DbWeight::get().reads_writes(2, 1))]
+		#[pallet::call_index(2)]
 		pub fn unmap_iban_account(
 			origin: OriginFor<T>,
 			iban: IbanOf<T>,
@@ -252,6 +255,7 @@ pub mod pallet {
 		/// `iban`: IbanOf<T> account of the receiver
 		/// `dest`: `TransferDestination` enum which can be either `Iban`, `AccountId` or withdrawal
 		#[pallet::weight(T::DbWeight::get().reads_writes(10, 2))]
+		#[pallet::call_index(3)]
 		pub fn transfer(
 			origin: OriginFor<T>,
 			amount: BalanceOf<T>,
@@ -326,7 +330,8 @@ pub mod pallet {
 		/// `statements`: list of statements to process
 		/// 	`iban_account`: IBAN account connected to the statement
 		/// 	`Vec<Transaction>`: List of transactions to process
-		#[pallet::weight(100_000_000)]
+		#[pallet::weight(T::DbWeight::get().reads_writes(statements.len() as u64, statements.len() as u64))]
+		#[pallet::call_index(4)]
 		pub fn process_statements(
 			origin: OriginFor<T>,
 			statements: StatementsOf<T>,
@@ -413,16 +418,14 @@ pub mod pallet {
 	pub struct GenesisConfig<T: Config> {
 		pub accounts: Vec<(T::AccountId, Vec<u8>)>,
 	}
-
-	#[cfg(feature = "std")]
 	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
-			Self { accounts: vec![] }
+			GenesisConfig { accounts: vec![] }
 		}
 	}
 
 	#[pallet::genesis_build]
-	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
 			for (account, iban) in &self.accounts {
 				Accounts::<T>::insert(
