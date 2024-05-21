@@ -47,29 +47,15 @@ Note: the above code might take long to compile depending on your machine specs
 
 ## Run
 
-The OWC needs the backend which connects to the bank account, which is provided by
-[this project](https://github.com/element36-io/ebics-java-service). We run the test version of the API in our own server and it is used as default API url for the offchain worker. However, sudo user can change the API url by submitting an extrinsic. If you want to run your local backend instance:
-
-```sh
-docker run -p 8093:8093 e36io/ebics-service 
-```
-There are some known issues with running the backend on M1 Silicon chips, so use our server if that's the case.
+This chain needs EBICS Java service, which is responsible for connecting to the bank account and providing an API for our offchain worker to interact with. You can find the service [here](https://github.com/element36-io/ebics-java-service). Follow the instructions in the README to run the service.
 
 Now start the OCW. The provided `cargo run` command will launch a temporary node and its state will be discarded after
 you terminate the process. After the project has been built, there are other ways to launch the
 node.
 
 ```sh
-./target/release/node-template --dev --tmp
+cargo run --release --dev --tmp
 
-# or, simply:
-make launch-chain
-```
-
-You can run the development node with temporary storage:
-
-```sh
-./target/release/node-template --dev --tmp
 # or, simply:
 make launch-chain
 ```
@@ -169,28 +155,40 @@ public_key: 5C555czPfaHgYhKhsRg2KNCLGCJ82jVsvweTHAnfvT83uy5T
 
 You can set the new url for the `ebics-service` via PolkadotJS interface. Follow this link to the `Sudo` [tab](https://polkadot.js.org/apps/#/sudo) and choose `FiatRamps.setApiUrl` extrinsic. Paste the new url for the API and click `Submit transaction`. If everything is good, i.e you are the Sudo account and you have the necessary rights, you should see the transaction included in the block and offchain worker starts querying the new API.
 
-### Run in Docker
+### Run with Docker
+
 
 First, install [Docker](https://docs.docker.com/get-docker/) and
 [Docker Compose](https://docs.docker.com/compose/install/).
 
 Then run the following command to start a single node development chain.
 
-Docker:
+Run with image from DockerHub:
 
 ```bash
-# Ready to use docker image
 docker run -it -p 9944:9944 e36io/ebics-ocw:hyperfridge --dev --tmp --unsafe-rpc-external --rpc-cors=all --rpc-methods=unsafe -loffchain-worker
+```
 
-# Build docker image MacOS (M1)
-docker build --platform linux/x86_64 -t ebics-ocw .
+#### Docker (Linux)
 
-# Build docker image Linux
+Build:
+```
 docker build -t ebics-ocw .
+```
 
-# Run docker image MacOS (M1)
-docker run --platform=linux/x86_64 -it -p 9944:9944 ebics-ocw:latest --dev --tmp --unsafe-rpc-external --rpc-cors=all --rpc-methods=unsafe -loffchain-worker
-
-# Run docker image Linux
+Run:
+```
 docker run -it -p 9944:9944 ebics-ocw:latest --dev --tmp --unsafe-rpc-external --rpc-cors=all --rpc-methods=unsafe -loffchain-worker
+```
+
+#### Docker (MacOS)
+
+Build:
+```
+docker build --platform linux/x86_64 -t ebics-ocw .
+```
+
+Run:
+```
+docker run --platform=linux/x86_64 -it -p 9944:9944 ebics-ocw:latest --dev --tmp --unsafe-rpc-external --rpc-cors=all --rpc-methods=unsafe -loffchain-worker
 ```
