@@ -60,6 +60,8 @@ cargo run --release --dev --tmp
 make launch-chain
 ```
 
+Or you can run the node with consistent state without `--tmp` flag.
+
 ## Tests
 
 To run unit tests for offchain-worker, execute the following command:
@@ -105,7 +107,7 @@ Following test accounts are for Alice, Bob and Charlie, respectively.
 
 ```json
 {
-  "accounts" : [ {
+  "accounts" : [ { 
     "ownerName" : "Alice",
     "iban" : "CH2108307000289537320",
     "accountId": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
