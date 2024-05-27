@@ -35,19 +35,6 @@ Below is a tutorial that demonstrates how our Substrate solo chain works.
 
 To get started, obviously make sure you have the necessary setup for Substrate development.
 
-## Ebics Java Service
-
-First, we need to run the EBICS Java service. This service is responsible for connecting to the bank account and providing an API for our offchain worker to interact with. You can find instructions for running the service [here](https://github.com/element36-io/ebics-java-service/blob/hyperfridge/docs/TEST.md#run-and-test-with-docker):
-
-Or manually, make sure you cloned [`ebics-java-service`](https://github.com/element36-io/ebics-java-service) and switch to `hyperfridge` branch:
-
-```
-docker compose pull
-docker compose up -d
-# optional
-docker compose logs -f
-```
-
 ### Image ID
 
 And you also need to get the image ID of the `hyperfridge` `riscv0` module. You can get it by running the following command:
@@ -159,4 +146,20 @@ After we submit extrinsic, we can see that the burn request event is created.
 Shortly after (approximately 3-4 blocks), we can notice that the burn request has been processed and transfer between Alice and Jack occurs. Notice that transfer occurs from an unknown wallet to Jack, not directly from Alice to Jack. This is offchain worker's account that stores the funds until transaction is finalized by LibEUfin backend.
 
 ![Extrinsic from Alice to Jack](/assets/alice-jack-event-zk.png)
- 
+
+## Ebics Java Service (Optional)
+
+You don't need to run the EBICS Java service, since we use the hosted version. However, if you want to run it locally, you can do so by following the instructions below.
+
+First, we need to run the EBICS Java service. This service is responsible for connecting to the bank account and providing an API for our offchain worker to interact with. You can find instructions for running the service [here](https://github.com/element36-io/ebics-java-service/blob/hyperfridge/docs/TEST.md#run-and-test-with-docker):
+
+Or manually, make sure you cloned [`ebics-java-service`](https://github.com/element36-io/ebics-java-service) and switch to `hyperfridge` branch:
+
+```
+docker compose pull
+docker compose up -d
+# optional
+docker compose logs -f
+```
+
+Then, you should do a sudo extrinsic `fiatRamps.setApiUrl` and set the new URL to `http://localhost:8093/ebics`. This will make sure that offchain worker is querying the correct API.
