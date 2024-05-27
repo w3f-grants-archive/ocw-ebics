@@ -172,9 +172,9 @@ Shortly after (approximately 3-4 blocks), we can notice that the burn request ha
 
 ## Ebics Java Service (Optional)
 
-You don't need to run the EBICS Java service, since we use the hosted version. However, if you want to run it locally, you can do so by following the instructions below.
+You don't need to run the EBICS Java service, since we use the hosted version [at](http://w.e36.io:8093/ebics). However, if you want to run it locally, you can do so by following the instructions below.
 
-First, we need to run the EBICS Java service. This service is responsible for connecting to the bank account and providing an API for our offchain worker to interact with. You can find instructions for running the service [here](https://github.com/element36-io/ebics-java-service/blob/hyperfridge/docs/TEST.md#run-and-test-with-docker):
+This service is responsible for connecting to the bank account and providing an API for our offchain worker to interact with. You can find instructions for running the service [here](https://github.com/element36-io/ebics-java-service/blob/hyperfridge/docs/TEST.md#run-and-test-with-docker):
 
 Or manually, make sure you cloned [`ebics-java-service`](https://github.com/element36-io/ebics-java-service) and switch to `hyperfridge` branch:
 
