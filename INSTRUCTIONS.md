@@ -97,7 +97,13 @@ Once you have submitted the call, head over to `Extrinsics -> fiatRamps -> creat
 
 #### Stablecoins are minted to Alice
 
-Stablecoins are minted only when offchain worker detects an incoming transaction from an unknown IBAN address, i.e from an IBAN address is not mapped to any on-chain account address. In order to see how it works in action, head over to the EBICS service [API](http://w.e36.io:8093/ebics/swagger-ui/?url=/ebics/v2/api-docs/#/). Open `/ebics/api-v1/createOrder` tab and fill out Bob's details. Namely, we will fill `purpose` field with Alice's on-chain account and `receipientIban` field with her IBAN number. Fill out Bob's IBAN from above JSON file as the `sourceIban`. Finally, execute the call. It should look something like this:
+Stablecoins are minted only when offchain worker detects an incoming transaction from an unknown IBAN address, i.e from an IBAN address is not mapped to any on-chain account address. In order to see how it works in action, head over to the EBICS service [API](http://w.e36.io:8093/ebics/swagger-ui/?url=/ebics/v2/api-docs/#/). Open `/ebics/api-v1/createOrder` tab and fill out Bob's details. Namely, we will fill `purpose` field with Alice's on-chain account and `receipientIban` field with her IBAN number. Fill out Bob's IBAN from above JSON file as the `sourceIban`. Finally, use these values and execute the call:
+```
+amount: 2 (or any other amount)
+purpose: 5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY
+receipientIban: CH2108307000289537320
+sourceIban: CH1230116000289537312
+```
 
 ![Alice mints](/assets/ebics-minting-zk.png)
 
@@ -109,7 +115,12 @@ This is how new stablecoins are minted in our chain.
 
 ### Stablecoins are burned from Alice
 
-Now, in order to see how burning works, we can either go to EBICS service again and call `/ebics/api-v1/unpeg` request or submit `fiatRamps.transfer` extrinsic. Let's use EBICS service again, as extrinsic calls are covered in the next demos. After filling up the `recipientIban` field with Bob's IBAN, our call should look like this:
+Now, in order to see how burning works, we can either go to EBICS service again and call `/ebics/api-v1/unpeg` request or submit `fiatRamps.transfer` extrinsic. Let's use EBICS service again, as extrinsic calls are covered in the next demos. After filling up the `recipientIban` field with these values:
+
+```
+amount: 1 (or any other amount)
+receipientIban: CH1230116000289537312
+```
 
 ![Alice burns](/assets/ebics-burning-zk.png)
 
@@ -125,7 +136,14 @@ For this part of the tutorial we will need to map Jack and Bob's IBAN numbers to
 
 It is also very important to know that we can not use PolkadotJS transfer button to move funds in our chain. This would break synchronization between the bank account balance and on-chain balance. In the future it should be disabled and the only way to transfer should be via burn requests.
 
-To make a transfer from Alice to Jack, we head over to our EBICS service [API](http://w.e36.io:8093/ebics/swagger-ui/?url=/ebics/v2/api-docs/#/). We open `/ebics/api-v1/createOrder` tab and fill out Jack's details. Namely, we will `purpose` field with Jack's on-chain account and `receipientIban` field with his IBAN number. And `sourceIban` field with Alice's IBAN number. We can then specify the amount and other fields. It should look similar to this:
+To make a transfer from Alice to Jack, we head over to our EBICS service [API](http://w.e36.io:8093/ebics/swagger-ui/?url=/ebics/v2/api-docs/#/). We open `/ebics/api-v1/createOrder` tab and fill out Jack's details. Namely, we will `purpose` field with Jack's on-chain account and `receipientIban` field with his IBAN number. And `sourceIban` field with Alice's IBAN number. We can then specify the amount and other fields:
+
+```
+amount: 1 (or any other amount)
+purpose: 5Hg6mE6QCiqDFH21yjDGe2JSezEZSTn9mBsZa6JsC3wo438c
+receipientIban: CH2108307000289537313
+sourceIban: CH2108307000289537320
+```
 
 ![Alice transfer to Jack](/assets/alice-transfers-jack-zk.png)
 
@@ -138,6 +156,11 @@ Once offchain worker has processed new statements, two `Transfer` events occur:
 #### Alice transfers to Jack via Extrinsic
 
 We go to `Extrinsic` tab, choose `fiatRamps.transfer` extrinsic call and choose `destination` as `Address`. Fill out the necessary fields and make sure that the amount is a positive number and more than 1 UNIT (10 decimals), otherwise extrinsic will fail.
+
+```
+amount: 10000000000
+dest: Address(5Hg6mE6QCiqDFH21yjDGe2JSezEZSTn9mBsZa6JsC3wo438c)
+```
 
 ![Extrinsic from Alice to Jack](/assets/alice-jack-ext-zk.png)
 
